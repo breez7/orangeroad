@@ -70,6 +70,8 @@ interface GameStoreState {
   playerPosition: PlayerPosition;
   setPlayerPosition: (pos: PlayerPosition) => void;
   npcs: Record<string, NPCStoreEntry>;
+  /** Phase 3.2 — bulk replace the NPC slice during a save load (FR-008). */
+  setNPCs: (npcs: Record<string, NPCStoreEntry>) => void;
 
   /** Phase 2.3 dialog slice. */
   dialog: DialogSlice;
@@ -118,12 +120,13 @@ const initialTime: TimeSlice = {
 };
 
 export const useGameStore = create<GameStoreState>((set) => ({
-  phase: '3.1',
+  phase: '3.2',
   currentLocationId: null,
   setCurrentLocation: (id) => set({ currentLocationId: id }),
   playerPosition: { x: 640, y: 360 },
   setPlayerPosition: (pos) => set({ playerPosition: pos }),
   npcs: initialNPCs,
+  setNPCs: (npcs) => set({ npcs }),
 
   dialog: initialDialog,
 

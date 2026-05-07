@@ -1,8 +1,9 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import { Game } from '@/core/Game';
 import { useGameStore } from '@/store/gameStore';
 import { DialogBox } from '@/ui/components/DialogBox';
 import { TimeDisplay } from '@/ui/components/TimeDisplay';
+import { SaveSlotsPanel } from '@/ui/components/SaveSlotsPanel';
 
 function App() {
   const phase = useGameStore((s) => s.phase);
@@ -23,6 +24,10 @@ function App() {
 
   const hostRef = useRef<HTMLDivElement>(null);
   const gameRef = useRef<Game | null>(null);
+
+  // Phase 3.2 — save panel toggle. The SaveSystem itself is owned by
+  // GameScene; the panel reads it lazily through gameRef when opened.
+  const [saveOpen, setSaveOpen] = useState(false);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -51,6 +56,9 @@ function App() {
     else useGameStore.getState().closeDialog();
   }, []);
 
+  const handleOpenSave = useCallback(() => setSaveOpen(true), []);
+  const handleCloseSave = useCallback(() => setSaveOpen(false), []);
+
   return (
     <div className="game-container">
       <div ref={hostRef} className="game-canvas" />
@@ -64,6 +72,13 @@ function App() {
             Player: ({Math.round(playerPosition.x)}, {Math.round(playerPosition.y)})
           </p>
           <p className="text-xs text-blue-300 mt-1">NPCs: {npcCount}</p>
+          <button
+            type="button"
+            onClick={handleOpenSave}
+            className="btn-game text-xs px-3 py-1 mt-2"
+          >
+            세이브 / 로드
+          </button>
         </div>
 
         {/* Phase 3.1 — top-right clock HUD (FR-004). */}
@@ -78,6 +93,14 @@ function App() {
           error={dialogError}
           onSend={handleSend}
           onClose={handleClose}
+        />
+
+        {/* Phase 3.2 — save/load panel (FR-008). Read SaveSystem lazily so
+            we don't capture a stale reference if the scene is rebuilt. */}
+        <SaveSlotsPanel
+          open={saveOpen}
+          saveSystem={gameRef.current?.saveSystem ?? null}
+          onClose={handleCloseSave}
         />
       </div>
     </div>

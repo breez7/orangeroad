@@ -119,6 +119,19 @@ export class NPC {
     // Intentionally empty — NPCs do not move yet.
   }
 
+  /**
+   * Phase 3.2 — restore NPC position + locationId from a save (FR-008).
+   * Position is in town-local coords. NPCs don't yet move on their own, so
+   * we don't need to cancel any in-flight pathing here.
+   */
+  teleport(x: number, y: number, locationId: string | null): void {
+    this.x = x;
+    this.y = y;
+    this.view.x = x;
+    this.view.y = y;
+    this.locationId = locationId;
+  }
+
   destroy(): void {
     this.view.destroy({ children: true });
   }

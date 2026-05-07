@@ -3,10 +3,12 @@ import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { gameRoutes } from '@/routes/game';
 import { createNPCRoutes } from '@/routes/npc';
-import { saveRoutes } from '@/routes/save';
+import { createSaveRoutes } from '@/routes/save';
 import { LLMClient } from '@/ai/LLMClient';
 import { ContextManager } from '@/ai/ContextManager';
 import { NPCService } from '@/services/NPCService';
+import { SaveStorage } from '@/storage/SaveStorage';
+import { SaveService } from '@/services/SaveService';
 
 const app = new Hono();
 
@@ -33,8 +35,12 @@ const llmClient = new LLMClient();
 const contextManager = new ContextManager();
 const npcService = new NPCService(llmClient, contextManager);
 
+// --- Phase 3.2 wiring: SaveStorage + SaveService for FR-008 save/load.
+const saveStorage = new SaveStorage();
+const saveService = new SaveService({ storage: saveStorage });
+
 app.get('/', (c) =>
-  c.json({ name: 'orangeroad-backend', version: '0.1.0', phase: '2.2' }),
+  c.json({ name: 'orangeroad-backend', version: '0.1.0', phase: '3.2' }),
 );
 
 app.get('/health', (c) =>
@@ -43,7 +49,7 @@ app.get('/health', (c) =>
 
 app.route('/game', gameRoutes);
 app.route('/npc', createNPCRoutes({ npcService }));
-app.route('/save', saveRoutes);
+app.route('/save', createSaveRoutes({ saveService }));
 
 app.notFound((c) => c.json({ error: 'not_found', path: c.req.path }, 404));
 

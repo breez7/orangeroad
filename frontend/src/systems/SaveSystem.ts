@@ -1,0 +1,192 @@
+/**
+ * SaveSystem — Phase 3.2 (FR-008 세이브/로드).
+ *
+ * Reference: DESIGN.md §"Frontend Structure" (`systems/SaveSystem.ts`).
+ *
+ * This system is the bridge between:
+ *   - Zustand store (source of truth for serialisable state)
+ *   - TimeSystem (clock that needs an explicit reset on load)
+ *   - PixiJS entities (Player + NPCs that must teleport on load)
+ *   - Backend save API (createSave / loadSave / listSaves / deleteSave)
+ *
+ * It is StrictMode-safe: it owns no timers, no DOM listeners, and no
+ * subscriptions. Constructed once in App.tsx and passed to the panel via
+ * props; an aborted React effect simply drops the instance.
+ *
+ * Versioning: only `version: 1` is accepted on load. Any other version
+ * throws — we'll add a real migration path when v2 lands.
+ */
+
+import {
+  createSave,
+  deleteSave,
+  listSaves,
+  loadSave,
+  type GameSavePayload,
+  type SaveCreateResult,
+  type SaveListResult,
+  type SaveSummary,
+} from '@/api/client';
+import type { Player } from '@/entities/Player';
+import type { EntityManager } from '@/entities/EntityManager';
+import { useGameStore, type NPCStoreEntry } from '@/store/gameStore';
+import type { TimeSystem } from '@/systems/TimeSystem';
+
+export class SaveError extends Error {
+  readonly cause?: unknown;
+  constructor(message: string, cause?: unknown) {
+    super(message);
+    this.name = 'SaveError';
+    this.cause = cause;
+  }
+}
+
+export interface SaveSystemDeps {
+  /** Game clock — needs setTime() on load and getTime()/getDayOfWeek() on save. */
+  timeSystem: TimeSystem;
+  /** Player entity — teleported on load. */
+  player: Player;
+  /** EntityManager — used to teleport NPCs on load. */
+  entityManager: EntityManager;
+}
+
+export class SaveSystem {
+  private readonly timeSystem: TimeSystem;
+  private readonly player: Player;
+  private readonly entityManager: EntityManager;
+
+  constructor(deps: SaveSystemDeps) {
+    this.timeSystem = deps.timeSystem;
+    this.player = deps.player;
+    this.entityManager = deps.entityManager;
+  }
+
+  /**
+   * Capture the current store state into a versioned save payload.
+   * Public for tests and for the panel to preview-before-save in the future.
+   */
+  buildPayload(label?: string): GameSavePayload {
+    const state = useGameStore.getState();
+    const payload: GameSavePayload = {
+      version: 1,
+      savedAt: Date.now(),
+      phase: state.phase,
+      time: { ...state.time },
+      playerPosition: { ...state.playerPosition },
+      npcs: Object.fromEntries(
+        Object.entries(state.npcs).map(([id, npc]) => [
+          id,
+          {
+            id: npc.id,
+            name: npc.name,
+            locationId: npc.locationId,
+            position: { ...npc.position },
+          },
+        ]),
+      ),
+      currentLocationId: state.currentLocationId,
+    };
+    if (label !== undefined && label.length > 0) {
+      payload.label = label;
+    }
+    return payload;
+  }
+
+  /**
+   * Build payload from current state, push to backend, return server result.
+   * Errors propagate as SaveError (wrapping APIError) so the UI can show one
+   * uniform "save failed" path.
+   */
+  async save(slotId: string, label?: string): Promise<SaveCreateResult> {
+    const payload = this.buildPayload(label);
+    try {
+      return await createSave(slotId, payload);
+    } catch (err) {
+      throw new SaveError(`save failed for slot ${slotId}`, err);
+    }
+  }
+
+  /**
+   * Pull a save payload from the backend, validate, then apply to store +
+   * scene entities atomically (entity teleports happen after store updates,
+   * which keeps the store-driven UI from blinking the old positions).
+   */
+  async load(slotId: string): Promise<GameSavePayload> {
+    let payload: GameSavePayload;
+    try {
+      payload = await loadSave(slotId);
+    } catch (err) {
+      throw new SaveError(`load failed for slot ${slotId}`, err);
+    }
+
+    if (payload.version !== 1) {
+      throw new SaveError(
+        `unsupported save version: ${(payload as { version?: unknown }).version}`,
+      );
+    }
+
+    this.applyPayload(payload);
+    return payload;
+  }
+
+  async list(): Promise<SaveSummary[]> {
+    try {
+      const result: SaveListResult = await listSaves();
+      return result.slots;
+    } catch (err) {
+      throw new SaveError('list saves failed', err);
+    }
+  }
+
+  async delete(slotId: string): Promise<void> {
+    try {
+      await deleteSave(slotId);
+    } catch (err) {
+      throw new SaveError(`delete failed for slot ${slotId}`, err);
+    }
+  }
+
+  // --- internals ------------------------------------------------------------
+
+  private applyPayload(payload: GameSavePayload): void {
+    const store = useGameStore.getState();
+
+    // 1. Time — clock first so any time-derived UI sees the new state when
+    //    we then re-render from the rest of the slice updates.
+    this.timeSystem.setTime({
+      day: payload.time.day,
+      hour: payload.time.hour,
+      minute: payload.time.minute,
+    });
+
+    // 2. Store — player position, current location, NPC slice. We rebuild
+    //    the NPC record from the payload but keep names from the payload
+    //    rather than initialNPCs so a future renamed NPC restores cleanly.
+    store.setPlayerPosition({ ...payload.playerPosition });
+    store.setCurrentLocation(payload.currentLocationId);
+
+    const restored: Record<string, NPCStoreEntry> = {};
+    for (const [id, npc] of Object.entries(payload.npcs)) {
+      restored[id] = {
+        id: npc.id,
+        name: npc.name,
+        locationId: npc.locationId,
+        position: { ...npc.position },
+      };
+    }
+    store.setNPCs(restored);
+
+    // 3. Scene entities — teleport AFTER store updates so the position
+    //    overlay reads the new value on the next selector tick.
+    this.player.teleport(payload.playerPosition.x, payload.playerPosition.y);
+    for (const [id, npc] of Object.entries(payload.npcs)) {
+      const entity = this.entityManager.getNPC(id);
+      if (entity) {
+        entity.teleport(npc.position.x, npc.position.y, npc.locationId);
+      }
+      // Unknown ids in the save (e.g. an NPC removed from the roster) are
+      // silently ignored — the store still keeps the entry so a future
+      // reload retains it, but no scene entity exists to update.
+    }
+  }
+}

@@ -1,0 +1,195 @@
+/**
+ * SaveService — Phase 3.2 (FR-008 세이브/로드).
+ *
+ * Reference: DESIGN.md §"Backend Structure" `services/SaveService.ts` and
+ * §"GameState" data model.
+ *
+ * Responsibilities:
+ *  - Validate save payloads with zod at the API boundary.
+ *  - Delegate raw I/O to SaveStorage.
+ *  - Surface typed errors so the route layer can map to 400/404.
+ *
+ * Versioning:
+ *  - This phase persists `version: 1` only. We reject any other version
+ *    explicitly with `SaveValidationError` so a future v2 schema can land
+ *    behind a real migration path. NO in-place migrations here — when v2
+ *    arrives we'll add a dedicated migrator stage in front of `load()`.
+ *
+ * Scope notes:
+ *  - NPC dialog histories are persisted per-NPC by ContextManager (Phase
+ *    2.2). SaveService stores only the player-visible game state needed
+ *    for a clean restore: time, player position, NPC positions/locations,
+ *    and the current location id. NPC histories are intentionally NOT
+ *    duplicated here.
+ *  - No save-game encryption (NFR-005 baseline: friends-only deployment).
+ */
+
+import { z, ZodError } from 'zod';
+import type { SaveStorage, SaveSlotInfo } from '@/storage/SaveStorage';
+
+// --- Schema -----------------------------------------------------------------
+
+const SLOT_ID_RE = /^[a-z0-9_-]{1,32}$/;
+
+export const slotIdSchema = z
+  .string()
+  .regex(SLOT_ID_RE, 'slotId must match /^[a-z0-9_-]{1,32}$/');
+
+const dayOfWeekSchema = z.enum(['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN']);
+
+const timeSchema = z.object({
+  day: z.number().int().min(1),
+  hour: z.number().int().min(0).max(23),
+  minute: z.number().int().min(0).max(59),
+  dayOfWeek: dayOfWeekSchema,
+  phaseLabel: z.string().min(1).max(64),
+});
+
+const positionSchema = z.object({
+  x: z.number().finite(),
+  y: z.number().finite(),
+});
+
+const npcEntrySchema = z.object({
+  id: z.string().min(1).max(64),
+  name: z.string().min(1).max(64),
+  locationId: z.string().min(1).max(64).nullable(),
+  position: positionSchema,
+});
+
+/**
+ * Versioned save envelope. `version` is a literal `1` — adding a new shape
+ * later means bumping this and writing a migrator, not extending in-place.
+ */
+export const gameSaveV1Schema = z.object({
+  version: z.literal(1),
+  /** Epoch ms when the save was created. */
+  savedAt: z.number().int().nonnegative(),
+  /** Optional user-supplied label shown in the slot list. */
+  label: z.string().max(64).optional(),
+  /** Frontend phase string at save time — debug aid only. */
+  phase: z.string().min(1).max(32),
+  time: timeSchema,
+  playerPosition: positionSchema,
+  /** Map of NPC id → store-shape entry. */
+  npcs: z.record(z.string(), npcEntrySchema),
+  currentLocationId: z.string().min(1).max(64).nullable(),
+});
+
+export type GameSaveV1 = z.infer<typeof gameSaveV1Schema>;
+
+// --- Errors -----------------------------------------------------------------
+
+export class SaveValidationError extends Error {
+  readonly issues: ZodError['issues'];
+  constructor(message: string, issues: ZodError['issues']) {
+    super(message);
+    this.name = 'SaveValidationError';
+    this.issues = issues;
+  }
+}
+
+export class SaveNotFoundError extends Error {
+  readonly slotId: string;
+  constructor(slotId: string) {
+    super(`Save not found: ${slotId}`);
+    this.name = 'SaveNotFoundError';
+    this.slotId = slotId;
+  }
+}
+
+// --- Service ----------------------------------------------------------------
+
+export interface SaveServiceDeps {
+  storage: SaveStorage;
+}
+
+export interface SaveListEntry {
+  slotId: string;
+  savedAt: number;
+  label?: string;
+  phase: string;
+  time: GameSaveV1['time'];
+}
+
+export class SaveService {
+  private readonly storage: SaveStorage;
+
+  constructor({ storage }: SaveServiceDeps) {
+    this.storage = storage;
+  }
+
+  /** Validate and persist a save payload. Returns the canonical payload. */
+  async save(slotId: string, raw: unknown): Promise<GameSaveV1> {
+    this.assertSlotId(slotId);
+    const parsed = this.parsePayload(raw);
+    await this.storage.write(slotId, parsed);
+    return parsed;
+  }
+
+  /** Load a save payload by slot id. Throws SaveNotFoundError on missing. */
+  async load(slotId: string): Promise<GameSaveV1> {
+    this.assertSlotId(slotId);
+    const raw = await this.storage.read(slotId);
+    if (raw === null) throw new SaveNotFoundError(slotId);
+    return this.parsePayload(raw);
+  }
+
+  /**
+   * Enumerate all valid saves with summary metadata. Slots whose payload
+   * fails validation (corrupt / wrong version) are omitted from the list
+   * rather than failing the whole call.
+   */
+  async list(): Promise<SaveListEntry[]> {
+    const infos: SaveSlotInfo[] = await this.storage.list();
+    const out: SaveListEntry[] = [];
+    for (const info of infos) {
+      const raw = await this.storage.read(info.slotId);
+      if (raw === null) continue;
+      const result = gameSaveV1Schema.safeParse(raw);
+      if (!result.success) {
+        console.warn(
+          `[SaveService] skipping malformed slot ${info.slotId} in list:`,
+          result.error.issues,
+        );
+        continue;
+      }
+      const payload = result.data;
+      const entry: SaveListEntry = {
+        slotId: info.slotId,
+        savedAt: payload.savedAt,
+        phase: payload.phase,
+        time: payload.time,
+      };
+      if (payload.label !== undefined) entry.label = payload.label;
+      out.push(entry);
+    }
+    // Newest-first by savedAt (storage.list already sorts by mtime, but
+    // savedAt is the user-facing timestamp; trust the in-payload value).
+    out.sort((a, b) => b.savedAt - a.savedAt);
+    return out;
+  }
+
+  async del(slotId: string): Promise<void> {
+    this.assertSlotId(slotId);
+    const removed = await this.storage.delete(slotId);
+    if (!removed) throw new SaveNotFoundError(slotId);
+  }
+
+  // --- internals ------------------------------------------------------------
+
+  private assertSlotId(slotId: string): void {
+    const result = slotIdSchema.safeParse(slotId);
+    if (!result.success) {
+      throw new SaveValidationError('invalid slotId', result.error.issues);
+    }
+  }
+
+  private parsePayload(raw: unknown): GameSaveV1 {
+    const result = gameSaveV1Schema.safeParse(raw);
+    if (!result.success) {
+      throw new SaveValidationError('save payload validation failed', result.error.issues);
+    }
+    return result.data;
+  }
+}

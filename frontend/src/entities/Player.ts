@@ -95,6 +95,22 @@ export class Player {
     this.indicator.visible = false;
   }
 
+  /**
+   * Phase 3.2 — instantly relocate the player (FR-008 load).
+   *
+   * Cancels any in-progress walk target so the loaded save doesn't get
+   * overwritten by the previous click destination on the next frame.
+   */
+  teleport(x: number, y: number): void {
+    this.x = x;
+    this.y = y;
+    this.view.x = x;
+    this.view.y = y;
+    this.targetX = null;
+    this.targetY = null;
+    this.indicator.visible = false;
+  }
+
   /** True if currently moving toward a target. */
   get isMoving(): boolean {
     return this.targetX !== null && this.targetY !== null;

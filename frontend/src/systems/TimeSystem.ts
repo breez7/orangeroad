@@ -199,6 +199,30 @@ export class TimeSystem {
     this.speed = multiplier;
   }
 
+  /**
+   * Phase 3.2 — restore the clock from a save (FR-008).
+   *
+   * Resets the sub-minute accumulator so loading mid-tick doesn't immediately
+   * advance another minute. After updating internal counters we push a fresh
+   * snapshot to the store (recomputing dayOfWeek + phaseLabel from the new
+   * day/hour/minute, ignoring whatever was in the save — the save's labels
+   * are debug-only).
+   */
+  setTime(time: GameTime): void {
+    const day = Math.max(1, Math.floor(time.day));
+    const hour = Math.min(23, Math.max(0, Math.floor(time.hour)));
+    const minute = Math.min(59, Math.max(0, Math.floor(time.minute)));
+    this.day = day;
+    this.hour = hour;
+    this.minute = minute;
+    this.accumulator = 0;
+    // Force a snapshot push by clearing lastPushed — the new time may equal
+    // the old `lastPushed` if a load is a no-op, in which case the store-
+    // side dedupe will short-circuit anyway.
+    this.lastPushed = null;
+    this.pushSnapshot();
+  }
+
   // ---------- internals ----------
 
   private tickMinute(): void {

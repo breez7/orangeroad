@@ -7,6 +7,7 @@ import { NPCS } from '@/data/npcs';
 import { MovementSystem } from '@/systems/MovementSystem';
 import { DialogSystem } from '@/systems/DialogSystem';
 import { TimeSystem } from '@/systems/TimeSystem';
+import { SaveSystem } from '@/systems/SaveSystem';
 import { useGameStore } from '@/store/gameStore';
 
 export class GameScene {
@@ -21,6 +22,8 @@ export class GameScene {
    * explicit teardown is required beyond dropping the reference.
    */
   readonly time: TimeSystem;
+  /** Phase 3.2 — save/load orchestration (FR-008). */
+  readonly save: SaveSystem;
   private readonly locations: Location[] = [];
   private readonly movement: MovementSystem;
   private readonly npcLayer: Container;
@@ -86,6 +89,14 @@ export class GameScene {
     // pushes an initial snapshot to the store so TimeDisplay shows the
     // right state on first paint, before any ticker frames have run.
     this.time = new TimeSystem();
+
+    // Phase 3.2 — save system. No timers, no listeners; safe to construct
+    // here and drop with the scene on StrictMode double-invoke.
+    this.save = new SaveSystem({
+      timeSystem: this.time,
+      player: this.player,
+      entityManager: this.entityManager,
+    });
 
     // Click-to-walk system. Bind events on the scene root so empty grass
     // between location tiles still registers clicks. The dialog system gets

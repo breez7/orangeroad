@@ -181,3 +181,97 @@ export async function clearNPCContext(
     { method: 'DELETE', signal: opts.signal },
   );
 }
+
+// ---- Phase 3.2 Save/Load (FR-008) -----------------------------------------
+
+/**
+ * Save list summary entry — mirrors backend SaveListEntry. Kept structurally
+ * compatible with `GameSavePayload['time']` so the slot-list UI can render
+ * the saved time without a separate type.
+ */
+export interface SaveSummary {
+  slotId: string;
+  savedAt: number;
+  label?: string;
+  phase: string;
+  time: {
+    day: number;
+    hour: number;
+    minute: number;
+    dayOfWeek: 'MON' | 'TUE' | 'WED' | 'THU' | 'FRI' | 'SAT' | 'SUN';
+    phaseLabel: string;
+  };
+}
+
+export interface SaveNPCEntry {
+  id: string;
+  name: string;
+  locationId: string | null;
+  position: { x: number; y: number };
+}
+
+/**
+ * Versioned save payload — must match `gameSaveV1Schema` on the backend.
+ * The frontend `SaveSystem` builds this from the Zustand store and submits
+ * it to POST /save/:slotId.
+ */
+export interface GameSavePayload {
+  version: 1;
+  savedAt: number;
+  label?: string;
+  phase: string;
+  time: SaveSummary['time'];
+  playerPosition: { x: number; y: number };
+  npcs: Record<string, SaveNPCEntry>;
+  currentLocationId: string | null;
+}
+
+export interface SaveListResult {
+  slots: SaveSummary[];
+}
+
+export interface SaveCreateResult {
+  slotId: string;
+  savedAt: number;
+}
+
+export async function listSaves(
+  opts: { signal?: AbortSignal } = {},
+): Promise<SaveListResult> {
+  return fetchJSON<SaveListResult>('/save', {
+    method: 'GET',
+    signal: opts.signal,
+  });
+}
+
+export async function createSave(
+  slotId: string,
+  payload: GameSavePayload,
+  opts: { signal?: AbortSignal } = {},
+): Promise<SaveCreateResult> {
+  return fetchJSON<SaveCreateResult>(`/save/${encodeURIComponent(slotId)}`, {
+    method: 'POST',
+    body: payload,
+    signal: opts.signal,
+  });
+}
+
+export async function loadSave(
+  slotId: string,
+  opts: { signal?: AbortSignal } = {},
+): Promise<GameSavePayload> {
+  return fetchJSON<GameSavePayload>(`/save/${encodeURIComponent(slotId)}`, {
+    method: 'GET',
+    signal: opts.signal,
+  });
+}
+
+export async function deleteSave(
+  slotId: string,
+  opts: { signal?: AbortSignal } = {},
+): Promise<{ slotId: string; deleted: true }> {
+  return fetchJSON<{ slotId: string; deleted: true }>(
+    `/save/${encodeURIComponent(slotId)}`,
+    { method: 'DELETE', signal: opts.signal },
+  );
+}

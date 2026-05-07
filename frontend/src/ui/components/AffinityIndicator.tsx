@@ -43,7 +43,7 @@ export function AffinityIndicator({ affinity, emotion }: AffinityIndicatorProps)
 
   return (
     <div className="flex items-center gap-2 text-xs">
-      <span className="flex items-center gap-1" title={meta.label}>
+      <span className="flex items-center gap-1" title={meta.label} data-testid="emotion-label">
         <span aria-hidden className="text-base leading-none">{meta.emoji}</span>
         <span className="text-gray-300">{meta.label}</span>
       </span>

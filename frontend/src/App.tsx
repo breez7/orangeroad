@@ -80,6 +80,49 @@ function App() {
     const game = new Game();
     gameRef.current = game;
     void game.init(host);
+    // Dev-only: expose a small helper so Playwright tests can teleport the
+    // player and step through scripted events without driving the entire
+    // Pixi click pipeline. Stripped from production by Vite tree-shaking.
+    if (import.meta.env.DEV) {
+      (window as unknown as {
+        __game: {
+          teleportPlayer: (x: number, y: number) => void;
+          openDialogWith: (npcId: string) => void;
+          playEvent: (eventId: string) => Promise<void>;
+          setTimeSpeed: (multiplier: number) => void;
+          displaceNpc: (npcId: string, x: number, y: number) => void;
+        };
+      }).__game = {
+        teleportPlayer: (x: number, y: number) => {
+          const scene = gameRef.current?.currentScene;
+          if (!scene) return;
+          scene.player.teleport(x, y);
+          useGameStore.getState().setPlayerPosition({ x, y });
+        },
+        openDialogWith: (npcId: string) => {
+          gameRef.current?.dialogSystem?.openWith(npcId);
+        },
+        playEvent: async (eventId: string) => {
+          const story = gameRef.current?.storySystem;
+          if (!story) return;
+          await story.playEvent(eventId);
+        },
+        setTimeSpeed: (multiplier: number) => {
+          const scene = gameRef.current?.currentScene;
+          if (scene) scene.time.setSpeed(multiplier);
+        },
+        displaceNpc: (npcId: string, x: number, y: number) => {
+          const scene = gameRef.current?.currentScene;
+          if (!scene) return;
+          const npc = scene.entityManager.getNPC(npcId);
+          if (npc) npc.teleport(x, y, '__displaced__');
+          const s = useGameStore.getState();
+          const npcs = { ...s.npcs };
+          npcs[npcId] = { ...npcs[npcId], position: { x, y }, locationId: '__displaced__' };
+          s.setNPCs(npcs);
+        },
+      };
+    }
     return () => {
       gameRef.current = null;
       game.destroy();
@@ -158,10 +201,10 @@ function App() {
   }, []);
 
   return (
-    <div className="game-container">
-      <div ref={hostRef} className="game-canvas" />
+    <div className="game-container" data-testid="game-container">
+      <div ref={hostRef} className="game-canvas" data-testid="game-canvas-host" />
       <div className="ui-overlay">
-        <div className="status-panel ui-interactive">
+        <div className="status-panel ui-interactive" data-testid="status-panel">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
               <h2 className="text-base sm:text-lg font-bold text-orange-primary leading-tight">
@@ -190,7 +233,7 @@ function App() {
 
           {showStatusDetails && (
             <div className="mt-1 space-y-0.5 animate-fade-in">
-              <p className="text-xs text-green-400">
+              <p className="text-xs text-green-400" data-testid="player-coords">
                 Player: ({Math.round(playerPosition.x)}, {Math.round(playerPosition.y)})
               </p>
               <p className="text-xs text-blue-300">NPCs: {npcCount}</p>
@@ -198,6 +241,7 @@ function App() {
                 type="button"
                 onClick={handleOpenSave}
                 className="btn-game text-xs px-3 py-1 mt-2"
+                data-testid="open-save-panel"
               >
                 세이브 / 로드
               </button>
@@ -210,6 +254,7 @@ function App() {
               onClick={handleOpenSave}
               className="btn-game-ghost text-xs px-2 py-0.5 mt-1"
               aria-label="세이브 / 로드 열기"
+              data-testid="open-save-panel-compact"
             >
               저장
             </button>

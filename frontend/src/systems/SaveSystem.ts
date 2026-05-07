@@ -13,8 +13,13 @@
  * subscriptions. Constructed once in App.tsx and passed to the panel via
  * props; an aborted React effect simply drops the instance.
  *
- * Versioning: only `version: 1` is accepted on load. Any other version
- * throws — we'll add a real migration path when v2 lands.
+ * Versioning:
+ *   v1 — pre-Phase-C; no `currentScene` field. Loaded as-if outdoor.
+ *   v2 — Phase C (Issue #23); adds `currentScene` so we restore the right
+ *        top-level scene (outdoor town map vs an interior room).
+ *
+ * The loader migrates v1 → v2 in-place (default `currentScene: outdoor`)
+ * and then applies the resulting payload to the store + entities.
  */
 
 import {
@@ -69,7 +74,9 @@ export class SaveSystem {
   buildPayload(label?: string): GameSavePayload {
     const state = useGameStore.getState();
     const payload: GameSavePayload = {
-      version: 1,
+      // Phase C — bumped to v2. Loader still accepts v1 saves and migrates
+      // them in-place by defaulting `currentScene` to outdoor.
+      version: 2,
       savedAt: Date.now(),
       phase: state.phase,
       time: { ...state.time },
@@ -110,6 +117,12 @@ export class SaveSystem {
       // always emit on new saves so a save→load round-trip preserves the
       // user's volume / mute / bgm-enabled choices.
       audio: { ...state.audio },
+      // Phase C — current scene (outdoor town vs a specific indoor room).
+      // Always emitted on v2; v1 loaders will simply ignore the field.
+      currentScene:
+        state.currentScene.kind === 'indoor'
+          ? { kind: 'indoor', sceneId: state.currentScene.sceneId }
+          : { kind: 'outdoor' },
     };
     if (label !== undefined && label.length > 0) {
       payload.label = label;
@@ -144,10 +157,20 @@ export class SaveSystem {
       throw new SaveError(`load failed for slot ${slotId}`, err);
     }
 
-    if (payload.version !== 1) {
+    // Phase C — accept v1 (pre-#23) and v2 (#23+). v1 → v2 migration is just
+    // "default currentScene to outdoor" since every other field is shared.
+    // Any other version is rejected so a future v3 lands behind a real
+    // migration path rather than silently coercing.
+    if (payload.version !== 1 && payload.version !== 2) {
       throw new SaveError(
         `unsupported save version: ${(payload as { version?: unknown }).version}`,
       );
+    }
+    if (payload.version === 1) {
+      // In-place upgrade. The optional `currentScene` field is already
+      // typed as undefined-or-present on `GameSavePayload`, so we just
+      // assign a default here and bump the version literal.
+      payload = { ...payload, version: 2, currentScene: { kind: 'outdoor' } };
     }
 
     this.applyPayload(payload);
@@ -233,8 +256,11 @@ export class SaveSystem {
       store.setAudioSettings(payload.audio);
     }
 
-    // 3. Scene entities — teleport AFTER store updates so the position
-    //    overlay reads the new value on the next selector tick.
+    // 3. Scene entities — teleport BEFORE the scene swap so the existing
+    //    Player / NPC views reflect the new positions on the same frame
+    //    for the same-scene round-trip case (the most common one). Doing
+    //    this before the scene swap also avoids touching destroyed views
+    //    if the swap fires in step 4.
     this.player.teleport(payload.playerPosition.x, payload.playerPosition.y);
     for (const [id, npc] of Object.entries(payload.npcs)) {
       const entity = this.entityManager.getNPC(id);
@@ -245,5 +271,13 @@ export class SaveSystem {
       // silently ignored — the store still keeps the entry so a future
       // reload retains it, but no scene entity exists to update.
     }
+
+    // 4. Phase C (Issue #23) — restore the active scene slice last. The
+    //    actual scene swap (destroy current scene, mount the right one) is
+    //    driven by Game.ts via a store subscriber on `currentScene`. The
+    //    post-swap scene re-reads `playerPosition` from the store (already
+    //    set in step 2) on construction, so it lands at the right spot.
+    //    Missing on v1 saves → outdoor.
+    store.setCurrentScene(payload.currentScene ?? { kind: 'outdoor' });
   }
 }

@@ -70,8 +70,28 @@ const npcEntrySchema = z.object({
  * before the story system existed keep loading. Missing slices default to
  * empty (no flags set, no events fired).
  */
+/**
+ * Phase C (Issue #23) — discriminated union schema for the active scene.
+ * `outdoor` means the player is on the town map; `indoor` means inside one
+ * of the indoor scenes (sceneId matches both the indoor scene id and the
+ * outdoor location rect id). Optional on v1 saves (defaults to outdoor on
+ * load); always present in v2.
+ */
+const currentSceneSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('outdoor') }),
+  z.object({ kind: z.literal('indoor'), sceneId: z.string().min(1).max(64) }),
+]);
+
 export const gameSaveV1Schema = z.object({
-  version: z.literal(1),
+  /**
+   * v1 — saves written before Issue #23 (no `currentScene`).
+   * v2 — saves written from Issue #23 onward; carries the active scene.
+   * Both versions share every other field; the only schema delta is the
+   * presence of `currentScene` (which is also accepted on v1 for clients
+   * that pre-emptively emit it). `parsePayload` uses the literal version
+   * value, not the field's presence, to decide migration.
+   */
+  version: z.union([z.literal(1), z.literal(2)]),
   /** Epoch ms when the save was created. */
   savedAt: z.number().int().nonnegative(),
   /** Optional user-supplied label shown in the slot list. */
@@ -119,6 +139,11 @@ export const gameSaveV1Schema = z.object({
       bgmEnabled: z.boolean(),
     })
     .optional(),
+  /**
+   * Phase C (Issue #23) — active top-level scene at save time. Optional on
+   * v1 (frontend defaults missing → outdoor on load); v2 always emits it.
+   */
+  currentScene: currentSceneSchema.optional(),
 });
 
 export type GameSaveV1 = z.infer<typeof gameSaveV1Schema>;

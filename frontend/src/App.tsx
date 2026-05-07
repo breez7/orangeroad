@@ -97,6 +97,10 @@ function App() {
           displaceNpc: (npcId: string, x: number, y: number) => void;
           advanceTime: (minutes: number) => void;
           loadSlot: (slotId: string) => Promise<void>;
+          /** Phase C (Issue #23) — bypass the doorway for tests/manual debug. */
+          enterIndoor: (sceneId: string) => void;
+          /** Phase C (Issue #23) — return to the outdoor town. */
+          exitIndoor: () => void;
         };
       }).__game = {
         teleportPlayer: (x: number, y: number) => {
@@ -148,6 +152,12 @@ function App() {
           const sys = gameRef.current?.saveSystem;
           if (!sys) return;
           await sys.load(slotId);
+        },
+        enterIndoor: (sceneId: string) => {
+          gameRef.current?.enterIndoor(sceneId);
+        },
+        exitIndoor: () => {
+          gameRef.current?.exitIndoor();
         },
       };
     }

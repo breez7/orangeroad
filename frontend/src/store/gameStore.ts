@@ -222,7 +222,30 @@ interface GameStoreState {
   setBgmEnabled: (b: boolean) => void;
   /** Bulk replace — used by SaveSystem.load to restore audio prefs. */
   setAudioSettings: (audio: Partial<AudioSlice>) => void;
+
+  /**
+   * Phase C (Issue #23) — which top-level scene the player is currently in.
+   * `outdoor` is the town map (GameScene); `indoor` is one of the
+   * INDOOR_SCENES rooms (IndoorScene). Save payloads round-trip this so a
+   * load returns the player to the right place.
+   */
+  currentScene: CurrentScene;
+  setCurrentScene: (scene: CurrentScene) => void;
 }
+
+/**
+ * Phase C (Issue #23) — discriminated union for the active top-level scene.
+ *
+ *   { kind: 'outdoor' }                   → town map (GameScene)
+ *   { kind: 'indoor', sceneId }           → interior room (IndoorScene)
+ *
+ * The `sceneId` matches both an `IndoorSceneDef.id` and the corresponding
+ * outdoor `LocationDef.id`. Stored in the gameStore (so React selectors can
+ * react to scene changes) AND serialized to the save payload (v2+).
+ */
+export type CurrentScene =
+  | { kind: 'outdoor' }
+  | { kind: 'indoor'; sceneId: string };
 
 const initialNPCs: Record<string, NPCStoreEntry> = Object.fromEntries(
   NPCS.map((def) => [
@@ -538,6 +561,25 @@ export const useGameStore = create<GameStoreState>((set) => ({
             : state.audio.bgmEnabled,
       },
     })),
+
+  // --- Phase C indoor scene slice (Issue #23) -----------------------------
+  currentScene: { kind: 'outdoor' },
+  setCurrentScene: (scene) =>
+    set((state) => {
+      // Shallow compare so a no-op write doesn't churn React subscribers.
+      const cur = state.currentScene;
+      if (cur.kind === scene.kind) {
+        if (cur.kind === 'outdoor' && scene.kind === 'outdoor') return state;
+        if (
+          cur.kind === 'indoor' &&
+          scene.kind === 'indoor' &&
+          cur.sceneId === scene.sceneId
+        ) {
+          return state;
+        }
+      }
+      return { currentScene: scene };
+    }),
 }));
 
 function clamp01(v: number): number {

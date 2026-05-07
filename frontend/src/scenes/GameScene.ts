@@ -3,6 +3,7 @@ import { Location } from '@/entities/Location';
 import { Player } from '@/entities/Player';
 import { EntityManager } from '@/entities/EntityManager';
 import { LOCATIONS, TOWN_BOUNDS } from '@/data/locations';
+import { hasIndoorScene } from '@/data/indoorScenes';
 import { NPCS } from '@/data/npcs';
 import { MovementSystem } from '@/systems/MovementSystem';
 import { DialogSystem } from '@/systems/DialogSystem';
@@ -18,6 +19,19 @@ import { useGameStore } from '@/store/gameStore';
 export interface GameSceneOptions {
   /** Phase 5.2 — shared AudioEngine. Owned by Game.ts, passed in here. */
   audioEngine: AudioEngine;
+  /**
+   * Phase C (Issue #23) — fires when the player walks into a building's
+   * doorway zone on the outdoor map. The scene doesn't perform the
+   * transition itself — it asks Game.ts (the owner of scene lifetime) to
+   * destroy this scene and mount the matching IndoorScene.
+   */
+  onRequestEnterIndoor?: (sceneId: string) => void;
+  /**
+   * Phase C (Issue #23) — optional spawn override. Used after exiting an
+   * indoor scene to drop the player at a known outdoorReturn coord rather
+   * than the town center.
+   */
+  spawnAt?: { x: number; y: number };
 }
 
 export class GameScene {
@@ -43,8 +57,21 @@ export class GameScene {
   private readonly locations: Location[] = [];
   private readonly movement: MovementSystem;
   private readonly npcLayer: Container;
+  /**
+   * Phase C (Issue #23) — scene-switch hook. Wired by Game.ts to swap to
+   * the matching IndoorScene when the player walks into a doorway zone.
+   */
+  private readonly onRequestEnterIndoor?: (sceneId: string) => void;
+  /**
+   * Phase C (Issue #23) — once the player has stepped into a building's
+   * doorway zone we set this to the location id and won't re-fire the
+   * enter callback until they walk out and back in. Without the latch a
+   * single click that lands inside the rect would re-trigger every tick.
+   */
+  private doorEntryLatch: string | null = null;
 
   constructor(opts: GameSceneOptions) {
+    this.onRequestEnterIndoor = opts.onRequestEnterIndoor;
     this.root = new Container();
     this.root.label = 'game-scene';
 
@@ -106,11 +133,25 @@ export class GameScene {
       this.entityManager.addNPC(def);
     }
 
-    // Spawn player at town center, above locations and NPCs.
-    const spawn = { x: TOWN_BOUNDS.width / 2, y: TOWN_BOUNDS.height / 2 };
+    // Spawn player at the supplied position (used when materialising back
+    // outside after an indoor exit) or fall back to town center.
+    const spawn = opts.spawnAt ?? {
+      x: TOWN_BOUNDS.width / 2,
+      y: TOWN_BOUNDS.height / 2,
+    };
     this.player = new Player({ x: spawn.x, y: spawn.y, speed: 220 });
     this.root.addChild(this.player.view);
     useGameStore.getState().setPlayerPosition({ x: spawn.x, y: spawn.y });
+    // Phase C — if we materialised inside or near a doorway after an exit,
+    // arm the latch with that location id so the player walking back out
+    // doesn't immediately re-trigger an enter. Cleared on first frame the
+    // player is outside any doorway zone.
+    {
+      const here = findLocationAt(spawn.x, spawn.y);
+      if (here && hasIndoorScene(here)) {
+        this.doorEntryLatch = here;
+      }
+    }
 
     // Phase 5.2 — effect system. Layer is added to the scene root above
     // the NPC layer so particles render on top of entities. Constructed
@@ -134,11 +175,22 @@ export class GameScene {
       effectSystem: this.effects,
     });
 
-    // Phase 3.1 — game clock. Defaults to day 1 (Monday) 08:00 with the
-    // canonical 1s = 1min acceleration from DESIGN.md. The constructor
+    // Phase 3.1 — game clock. Defaults to day 1 (Saturday) 10:30 with the
+    // canonical 2s = 1min acceleration from DESIGN.md. The constructor
     // pushes an initial snapshot to the store so TimeDisplay shows the
     // right state on first paint, before any ticker frames have run.
-    this.time = new TimeSystem();
+    //
+    // Phase C — re-construct from the store's current clock values so a
+    // scene swap mid-game (outdoor → indoor → outdoor) doesn't reset time
+    // back to the day-1 defaults.
+    {
+      const t = useGameStore.getState().time;
+      this.time = new TimeSystem({
+        startDay: t.day,
+        startHour: t.hour,
+        startMinute: t.minute,
+      });
+    }
 
     // Phase 3.2 — save system. No timers, no listeners; safe to construct
     // here and drop with the scene on StrictMode double-invoke.
@@ -228,7 +280,73 @@ export class GameScene {
         store.setPlayerLocationId(loc);
       }
     }
+    // Phase C (Issue #23) — doorway entry detection. Even when the player
+    // is at rest we evaluate the latch each frame so a teleport that drops
+    // them inside a doorway zone (e.g. dev hook) still triggers cleanly.
+    this.checkDoorwayEntry();
     this.updateInteractionHints();
+  }
+
+  /**
+   * Phase C (Issue #23) — doorway entry trigger.
+   *
+   * Fires when the player has come to rest *inside* an enterable building
+   * rect AND within a small doorway disc around the rect's center. The
+   * "at rest" requirement (not `isMoving`) keeps the player from being
+   * yanked into an indoor scene while they're walking PAST a building on
+   * their way to somewhere else — the scene swap should only happen when
+   * the user clicked on the building and the player has actually arrived.
+   *
+   * The `doorEntryLatch` keeps the trigger from re-firing every frame
+   * while the player stays inside; it's cleared when the player walks
+   * out of every doorway zone.
+   *
+   * If a transition is already in flight (dialog open, story active) we
+   * skip — the indoor scene shouldn't barge over a scripted moment.
+   */
+  private checkDoorwayEntry(): void {
+    if (!this.onRequestEnterIndoor) return;
+    if (this.dialog.isOpen || this.story.isEventActive) return;
+    const px = this.player.x;
+    const py = this.player.y;
+
+    // Doorway disc — generous enough to forgive imprecise clicks, small
+    // enough that "walking adjacent" doesn't trigger. Combined with the
+    // `isMoving` gate this won't fire on a transient pass-through.
+    const ENTER_RADIUS = 60;
+    let hit: string | null = null;
+    for (const l of LOCATIONS) {
+      if (!hasIndoorScene(l.id)) continue;
+      // Require the player to be inside the rect AND near the center.
+      // The rect-only check would also fire when they merely cross the
+      // perimeter; the center-distance check enforces "they really came
+      // to the door".
+      if (px < l.x || px > l.x + l.width) continue;
+      if (py < l.y || py > l.y + l.height) continue;
+      const cx = l.x + l.width / 2;
+      const cy = l.y + l.height / 2;
+      const d = Math.hypot(cx - px, cy - py);
+      if (d <= ENTER_RADIUS) {
+        hit = l.id;
+        break;
+      }
+    }
+
+    if (hit === null) {
+      // Player is outside every doorway zone — clear the latch so the next
+      // entry into any zone is treated as fresh.
+      this.doorEntryLatch = null;
+      return;
+    }
+
+    // Don't fire while the player is still walking — wait until they
+    // settle inside the doorway. This prevents accidental entries on
+    // walk-past trajectories.
+    if (this.player.isMoving) return;
+
+    if (this.doorEntryLatch === hit) return; // Already triggered for this zone.
+    this.doorEntryLatch = hit;
+    this.onRequestEnterIndoor(hit);
   }
 
   /**

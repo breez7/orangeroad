@@ -274,8 +274,28 @@ export interface SaveNPCEntry {
 /** Open value type for story flags (mirrors backend `FlagValue`). */
 export type FlagValue = boolean | string | number;
 
+/**
+ * Phase C (Issue #23) — current-scene slice carried in the save payload.
+ *
+ * `outdoor` means the player is in the town map (GameScene). `indoor` means
+ * they're in one of the INDOOR_SCENES interior rooms; the `sceneId` matches
+ * both the indoor scene id and the outdoor `LocationDef.id`.
+ *
+ * Optional on the wire so v1 saves (which predate this field) still load.
+ * Missing → outdoor.
+ */
+export type SaveCurrentScene =
+  | { kind: 'outdoor' }
+  | { kind: 'indoor'; sceneId: string };
+
 export interface GameSavePayload {
-  version: 1;
+  /**
+   * v1: pre-Phase-C — no `currentScene`.
+   * v2: Phase C — adds `currentScene` so loading restores the active scene.
+   * The frontend writes v2 going forward; the loader migrates v1 → v2 by
+   * defaulting `currentScene` to outdoor.
+   */
+  version: 1 | 2;
   savedAt: number;
   label?: string;
   phase: string;
@@ -299,6 +319,11 @@ export interface GameSavePayload {
     muted: boolean;
     bgmEnabled: boolean;
   };
+  /**
+   * Phase C (Issue #23) — currently-active scene at save time. v1 saves omit
+   * this and default to outdoor on load. v2 saves always emit it.
+   */
+  currentScene?: SaveCurrentScene;
 }
 
 export interface SaveListResult {

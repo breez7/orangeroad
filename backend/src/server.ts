@@ -59,7 +59,7 @@ const eventService = new EventService();
 const scheduleService = new ScheduleService();
 
 app.get('/', (c) =>
-  c.json({ name: 'orangeroad-backend', version: '0.1.0', phase: '4.2' }),
+  c.json({ name: 'orangeroad-backend', version: '0.1.0', phase: '5.3' }),
 );
 
 app.get('/health', (c) =>

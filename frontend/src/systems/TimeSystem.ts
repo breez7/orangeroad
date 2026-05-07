@@ -1,9 +1,14 @@
 /**
  * TimeSystem (Phase 3.1 — FR-004 / FR-009 prerequisite)
  *
- * Owns the in-game clock. Per `DESIGN.md` §"Time System Design":
- *   1 real-second = 1 game-minute
- *   1 real-minute = 1 game-hour
+ * Owns the in-game clock. Per `DESIGN.md` §"Time System Design" the original
+ * spec was 1 real-second = 1 game-minute. Phase 5.3 doubled the default to
+ * 2 real-seconds per game-minute (so a full game-day takes ~48 real-minutes
+ * instead of ~24) — the spec rate left no room to read NPC dialog before the
+ * next schedule tick fired, and dropping the rate to half is the smallest
+ * change that gives players time to breathe between events. The constant is
+ * still configurable via {@link TimeSystemOptions.secondsPerGameMinute}, so
+ * cutscenes / debug tools can revert to the spec rate when needed.
  *
  * Responsibilities (Phase 3.1 only):
  * - Tick a `GameTime` ({day, hour, minute}) at a configurable acceleration.
@@ -65,9 +70,12 @@ export interface TimeSystemOptions {
   startHour?: number;
   startMinute?: number;
   /**
-   * Real seconds per one game-minute. Default 1 — matches DESIGN.md
-   * "1 second = 1 minute". Cutscenes / cheats may temporarily change this via
-   * {@link TimeSystem.setSpeed} (which divides this value).
+   * Real seconds per one game-minute. Default 2 — Phase 5.3 tuning slowed
+   * the original 1s/min spec down so a full in-game day takes ~48 real
+   * minutes instead of ~24, giving players more time to read dialog and
+   * watch NPCs before the schedule ticks the next minute. Cutscenes /
+   * cheats may temporarily change this via {@link TimeSystem.setSpeed}
+   * (which divides this value).
    */
   secondsPerGameMinute?: number;
 }
@@ -105,7 +113,7 @@ export class TimeSystem {
     this.day = opts.startDay ?? 1;
     this.hour = opts.startHour ?? 8;
     this.minute = opts.startMinute ?? 0;
-    this.baseSecondsPerMinute = opts.secondsPerGameMinute ?? 1;
+    this.baseSecondsPerMinute = opts.secondsPerGameMinute ?? 2;
 
     // Push initial snapshot so UI shows the start state immediately, before
     // the first frame ticks.

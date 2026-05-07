@@ -130,6 +130,17 @@ export class AudioEngine {
     if (ctx.state === 'suspended') {
       void ctx.resume().catch(() => undefined);
     }
+
+    // Phase 5.3 bug fix: if the caller requested BGM BEFORE the user gesture
+    // (e.g. a save with bgmEnabled:true loads, then App's audio-sync effect
+    // calls playBgm() while ctx is still null), `playBgm()` recorded the
+    // intent in `bgmRequested` but couldn't start the oscillators. Now that
+    // the context is alive, honour the deferred request so the user hears
+    // BGM as soon as they grant the gesture instead of having to toggle the
+    // checkbox off-and-on to nudge it.
+    if (this.bgmRequested && this.bgmNodes.length === 0) {
+      this.playBgm();
+    }
   }
 
   /** Apply current music volume to the bus (no-op if context not ready). */

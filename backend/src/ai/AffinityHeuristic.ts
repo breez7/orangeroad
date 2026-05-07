@@ -36,6 +36,16 @@ export interface AffinityKeywordGroup {
  * Keyword table. Order matters only for the emotion tiebreak below — within a
  * group, multiple hits each contribute `weight`. Substring matching is
  * deliberate (e.g. "사랑해" matches "사랑").
+ *
+ * Phase 5.3 tuning rationale: Phase 3.3 launched with flirty=+3 and the
+ * per-character likes weight at +2. Playtesting (the manga's mood — slow-burn
+ * romance) suggested a player could spam "사랑해" and reach max affinity in
+ * roughly five minutes, which trivialised the relationship arc. Reducing
+ * flirty +3→+2 (and likes +2→+1, see below) means hitting affinity 100 now
+ * requires several days of consistent positive interaction across multiple
+ * keyword groups — closer to the source material's tempo. Negative weights
+ * are unchanged so anger remains harder to recover than affection is to
+ * earn (an asymmetry the manga relies on).
  */
 export const KEYWORD_GROUPS: AffinityKeywordGroup[] = [
   // Positive — generic kindness, gratitude, agreement
@@ -44,10 +54,12 @@ export const KEYWORD_GROUPS: AffinityKeywordGroup[] = [
     weight: 2,
     keywords: ['좋아', '고마워', '고맙', '감사', '기뻐', '행복', '재밌', '재미있'],
   },
-  // Flirty — romantic / complimentary
+  // Flirty — romantic / complimentary. Phase 5.3: lowered from +3 to +2 so a
+  // pure "사랑해" spam can't fast-track affinity (still capped by MAX_DELTA,
+  // but the per-hit weight drives how quickly that cap is reached).
   {
     tag: 'flirty',
-    weight: 3,
+    weight: 2,
     keywords: ['사랑', '예뻐', '예쁘', '귀여', '멋', '좋아해'],
   },
   // Shy — greetings, polite hellos. Smallest positive delta.
@@ -93,9 +105,19 @@ export interface DeriveArgs {
   dislikes?: string[];
 }
 
-/** Per-hit weight for character-specific likes (positive) / dislikes (negative). */
-export const PER_CHARACTER_LIKE_WEIGHT = 2;
-export const PER_CHARACTER_DISLIKE_WEIGHT = -2;
+/**
+ * Per-hit weight for character-specific likes (positive) / dislikes (negative).
+ *
+ * Phase 5.3 tuning: lowered from ±2 to ±1. The per-character bumps stack on
+ * top of global keyword matches AND each other (a single message can hit
+ * multiple likes at once), so even at ±1 a thoughtful turn that pings several
+ * of an NPC's interests will still hit MAX_DELTA. The previous ±2 made the
+ * per-character system the dominant signal, drowning out the broader
+ * sentiment groups. Halving keeps it as a meaningful flavour bump without
+ * letting it monopolise the score.
+ */
+export const PER_CHARACTER_LIKE_WEIGHT = 1;
+export const PER_CHARACTER_DISLIKE_WEIGHT = -1;
 
 export interface DeriveResult {
   affinityChange: number;

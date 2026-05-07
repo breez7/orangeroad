@@ -83,6 +83,11 @@ export class MovementSystem {
     this.root.off('pointerdown', this.onPointerDown);
     this.root.eventMode = 'auto';
     this.root.hitArea = null;
+    // Phase 5.3 bug fix: attach() set cursor='pointer' on the town root, but
+    // detach previously left it pointing — so a re-attach (e.g. StrictMode
+    // double-mount) saw a stale cursor. Reset to inherit so the page's
+    // default cursor takes over until attach() runs again.
+    this.root.cursor = 'inherit';
     this.attached = false;
   }
 

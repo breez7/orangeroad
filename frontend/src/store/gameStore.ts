@@ -288,7 +288,7 @@ const initialAudio: AudioSlice = {
 };
 
 export const useGameStore = create<GameStoreState>((set) => ({
-  phase: '5.2',
+  phase: '5.3',
   currentLocationId: null,
   setCurrentLocation: (id) => set({ currentLocationId: id }),
   playerPosition: { x: 640, y: 360 },

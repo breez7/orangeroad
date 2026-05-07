@@ -9,6 +9,6 @@
   "likes": ["달링", "농구", "운동", "데이트", "단것", "쿄우스케"],
   "dislikes": ["거절", "외로움", "공부", "어두운곳"],
   "catchphrases": ["달링~!", "정말이에요?!", "에헤헤", "좋아요!"],
-  "initialRelationship": { "affinity": 70, "emotion": "happy" },
+  "initialRelationship": { "affinity": 65, "emotion": "happy" },
   "openingLine": "달링~! 보고 싶었어요!"
 }

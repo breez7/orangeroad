@@ -6,6 +6,7 @@ import { LOCATIONS, TOWN_BOUNDS } from '@/data/locations';
 import { NPCS } from '@/data/npcs';
 import { MovementSystem } from '@/systems/MovementSystem';
 import { DialogSystem } from '@/systems/DialogSystem';
+import { TimeSystem } from '@/systems/TimeSystem';
 import { useGameStore } from '@/store/gameStore';
 
 export class GameScene {
@@ -13,6 +14,13 @@ export class GameScene {
   readonly player: Player;
   readonly entityManager: EntityManager;
   readonly dialog: DialogSystem;
+  /**
+   * Game clock. Owned by the scene so its lifetime matches the PixiJS world
+   * (StrictMode-safe: a fresh scene gets a fresh clock; the discarded one
+   * simply stops being ticked). Holds no DOM listeners or timers, so no
+   * explicit teardown is required beyond dropping the reference.
+   */
+  readonly time: TimeSystem;
   private readonly locations: Location[] = [];
   private readonly movement: MovementSystem;
   private readonly npcLayer: Container;
@@ -73,6 +81,12 @@ export class GameScene {
       entityManager: this.entityManager,
     });
 
+    // Phase 3.1 — game clock. Defaults to day 1 (Monday) 08:00 with the
+    // canonical 1s = 1min acceleration from DESIGN.md. The constructor
+    // pushes an initial snapshot to the store so TimeDisplay shows the
+    // right state on first paint, before any ticker frames have run.
+    this.time = new TimeSystem();
+
     // Click-to-walk system. Bind events on the scene root so empty grass
     // between location tiles still registers clicks. The dialog system gets
     // first crack at every click; movement ignores input while dialog is open.
@@ -107,6 +121,9 @@ export class GameScene {
   update(dt: number): void {
     this.player.update(dt);
     this.entityManager.update(dt);
+    // Tick the clock. Internally this only mutates the store on game-minute
+    // boundaries (default: ~once per real-second), not every frame.
+    this.time.update(dt);
     if (this.player.isMoving) {
       useGameStore.getState().setPlayerPosition({
         x: this.player.x,

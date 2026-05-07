@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback } from 'react';
 import { Game } from '@/core/Game';
 import { useGameStore } from '@/store/gameStore';
 import { DialogBox } from '@/ui/components/DialogBox';
+import { TimeDisplay } from '@/ui/components/TimeDisplay';
 
 function App() {
   const phase = useGameStore((s) => s.phase);
@@ -64,6 +65,9 @@ function App() {
           </p>
           <p className="text-xs text-blue-300 mt-1">NPCs: {npcCount}</p>
         </div>
+
+        {/* Phase 3.1 — top-right clock HUD (FR-004). */}
+        <TimeDisplay />
 
         <DialogBox
           open={dialogOpen}

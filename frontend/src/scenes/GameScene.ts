@@ -1,15 +1,19 @@
 import { Container, Graphics, Text } from 'pixi.js';
 import { Location } from '@/entities/Location';
 import { Player } from '@/entities/Player';
+import { EntityManager } from '@/entities/EntityManager';
 import { LOCATIONS, TOWN_BOUNDS } from '@/data/locations';
+import { NPCS } from '@/data/npcs';
 import { MovementSystem } from '@/systems/MovementSystem';
 import { useGameStore } from '@/store/gameStore';
 
 export class GameScene {
   readonly root: Container;
   readonly player: Player;
+  readonly entityManager: EntityManager;
   private readonly locations: Location[] = [];
   private readonly movement: MovementSystem;
+  private readonly npcLayer: Container;
 
   constructor() {
     this.root = new Container();
@@ -37,7 +41,22 @@ export class GameScene {
       this.locations.push(loc);
     }
 
-    // Spawn player at town center, above locations.
+    // NPC layer: above buildings, below the player avatar so the player
+    // visually walks "in front of" stationary NPCs. Phase 2.1 NPCs don't
+    // move, so render order is fixed and we don't need depth-sort yet.
+    this.npcLayer = new Container();
+    this.npcLayer.label = 'npc-layer';
+    // NPCs themselves shouldn't intercept clicks — the town root handles
+    // click-to-walk and consumed clicks would create dead zones.
+    this.npcLayer.eventMode = 'none';
+    this.root.addChild(this.npcLayer);
+
+    this.entityManager = new EntityManager(this.npcLayer);
+    for (const def of NPCS) {
+      this.entityManager.addNPC(def);
+    }
+
+    // Spawn player at town center, above locations and NPCs.
     const spawn = { x: TOWN_BOUNDS.width / 2, y: TOWN_BOUNDS.height / 2 };
     this.player = new Player({ x: spawn.x, y: spawn.y, speed: 220 });
     this.root.addChild(this.player.view);
@@ -54,7 +73,7 @@ export class GameScene {
     this.movement.attach();
 
     const banner = new Text({
-      text: '오렌지로드 마을 — Phase 1.4 (클릭하여 이동)',
+      text: '오렌지로드 마을 — Phase 2.1 (NPC 배치)',
       style: {
         fontFamily: 'system-ui, -apple-system, sans-serif',
         fontSize: 18,
@@ -73,6 +92,7 @@ export class GameScene {
   /** Per-frame update; called from Game.ts ticker. `dt` is in seconds. */
   update(dt: number): void {
     this.player.update(dt);
+    this.entityManager.update(dt);
     if (this.player.isMoving) {
       useGameStore.getState().setPlayerPosition({
         x: this.player.x,
@@ -93,6 +113,9 @@ export class GameScene {
 
   destroy(): void {
     this.movement.detach();
+    // Tear down NPCs before the parent container goes away so each NPC's
+    // own destroy() runs (StrictMode-safe re-init).
+    this.entityManager.destroyAll();
     this.player.destroy();
     for (const loc of this.locations) loc.destroy();
     this.locations.length = 0;

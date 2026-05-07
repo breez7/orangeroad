@@ -5,6 +5,7 @@ import { useGameStore } from '@/store/gameStore';
 function App() {
   const phase = useGameStore((s) => s.phase);
   const playerPosition = useGameStore((s) => s.playerPosition);
+  const npcCount = useGameStore((s) => Object.keys(s.npcs).length);
   const hostRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -28,6 +29,7 @@ function App() {
           <p className="text-xs text-green-400 mt-1">
             Player: ({Math.round(playerPosition.x)}, {Math.round(playerPosition.y)})
           </p>
+          <p className="text-xs text-blue-300 mt-1">NPCs: {npcCount}</p>
         </div>
       </div>
     </div>

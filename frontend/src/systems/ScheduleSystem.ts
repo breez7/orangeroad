@@ -38,6 +38,26 @@ export interface ScheduleSystemDeps {
 /** NPC ids that should NOT be auto-teleported (the player avatar). */
 const PLAYER_NPC_IDS = new Set<string>(['kyousuke']);
 
+/**
+ * When N NPCs share the same location, they would all teleport to the exact
+ * same pixel and stack on top of each other (only the topmost is visible).
+ * Spread them out on a small ring around the location center so they're each
+ * individually clickable. Deterministic per-id so positions are stable across
+ * minute ticks (the same NPC keeps the same offset).
+ */
+function offsetForNpc(npcId: string, locationId: string): { dx: number; dy: number } {
+  const key = `${locationId}:${npcId}`;
+  let h = 2166136261;
+  for (let i = 0; i < key.length; i++) {
+    h ^= key.charCodeAt(i);
+    h = (h * 16777619) >>> 0;
+  }
+  const angle = (h % 360) * (Math.PI / 180);
+  // Radius ~50px keeps everyone inside a 100px circle around the center.
+  const r = 50;
+  return { dx: Math.cos(angle) * r, dy: Math.sin(angle) * r };
+}
+
 export class ScheduleSystem {
   private readonly entityManager: EntityManager;
   private destroyed = false;
@@ -154,9 +174,12 @@ export class ScheduleSystem {
       if (!npc) continue;
       const center = centerOf(entry.locationId);
       if (!center) continue;
+      const { dx, dy } = offsetForNpc(id, entry.locationId);
+      const tx = center.x + dx;
+      const ty = center.y + dy;
       // Only teleport if the NPC isn't already inside the target location.
       if (npc.locationId !== entry.locationId) {
-        npc.teleport(center.x, center.y, entry.locationId);
+        npc.teleport(tx, ty, entry.locationId);
       }
     }
 
@@ -171,15 +194,18 @@ export class ScheduleSystem {
       if (!cur) continue;
       const center = centerOf(entry.locationId);
       if (!center) continue;
+      const { dx, dy } = offsetForNpc(id, entry.locationId);
+      const tx = center.x + dx;
+      const ty = center.y + dy;
       if (
         cur.locationId !== entry.locationId ||
-        cur.position.x !== center.x ||
-        cur.position.y !== center.y
+        cur.position.x !== tx ||
+        cur.position.y !== ty
       ) {
         nextNpcs[id] = {
           ...cur,
           locationId: entry.locationId,
-          position: { x: center.x, y: center.y },
+          position: { x: tx, y: ty },
         };
         mutated = true;
       }

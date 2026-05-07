@@ -54,6 +54,16 @@ export function DialogBox({
   const [inputValue, setInputValue] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  // Track IME composition state. Korean/Japanese/Chinese input methods fire
+  // keydown(Enter) with isComposing=true to *commit* a composition; users
+  // expect that first Enter to commit and the next Enter to actually send.
+  // We use a ref because the keydown handler reads it on the same tick that
+  // compositionend fires, and refs sidestep React's batched setState.
+  const composingRef = useRef(false);
+  // Suppresses the Enter that committed an IME composition — that keydown
+  // arrives after compositionend in some browsers (Chrome/Edge), so we have
+  // to filter it out for one keystroke.
+  const justComposedRef = useRef(false);
 
   // Auto-scroll history to the bottom whenever it changes (or while waiting,
   // so the typing indicator stays visible). Using scrollTop = scrollHeight
@@ -97,10 +107,31 @@ export function DialogBox({
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
-      e.preventDefault();
-      handleSend();
+    if (e.key !== 'Enter') return;
+    // Korean IME: the Enter that *commits* a composition arrives with
+    // isComposing=true (or right after compositionend on some browsers).
+    // We swallow it once so users don't have to press Enter twice.
+    if (e.nativeEvent.isComposing || composingRef.current || justComposedRef.current) {
+      justComposedRef.current = false;
+      return;
     }
+    e.preventDefault();
+    handleSend();
+  };
+
+  const handleCompositionStart = () => {
+    composingRef.current = true;
+  };
+  const handleCompositionEnd = () => {
+    composingRef.current = false;
+    // Some Chromium versions emit compositionend BEFORE the keydown that
+    // commits the IME — flag the next keydown so it's swallowed.
+    justComposedRef.current = true;
+    // Clear the flag after one tick if no Enter follows, so a subsequent
+    // typed Enter still sends.
+    setTimeout(() => {
+      justComposedRef.current = false;
+    }, 0);
   };
 
   return (
@@ -175,6 +206,8 @@ export function DialogBox({
           value={inputValue}
           onChange={(e) => setInputValue(e.target.value)}
           onKeyDown={handleKeyDown}
+          onCompositionStart={handleCompositionStart}
+          onCompositionEnd={handleCompositionEnd}
           disabled={isWaiting}
           maxLength={2000}
           placeholder="메시지를 입력하세요..."

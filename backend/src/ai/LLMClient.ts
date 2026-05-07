@@ -27,6 +27,7 @@ export interface LLMClientOptions {
   model: string;
   timeoutMs: number;
   temperature: number;
+  maxTokens: number;
 }
 
 export type LLMErrorKind =
@@ -61,12 +62,19 @@ export class LLMClient {
   private readonly model: string;
   private readonly timeoutMs: number;
   private readonly temperature: number;
+  private readonly maxTokens: number;
 
   constructor(opts: Partial<LLMClientOptions> = {}) {
     this.baseUrl = (opts.baseUrl ?? process.env.LM_STUDIO_URL ?? 'http://localhost:1234/v1').replace(/\/+$/, '');
     this.model = opts.model ?? process.env.LM_STUDIO_MODEL ?? 'local-model';
-    this.timeoutMs = opts.timeoutMs ?? Number(process.env.LM_STUDIO_TIMEOUT_MS ?? 30000);
+    this.timeoutMs = opts.timeoutMs ?? Number(process.env.LM_STUDIO_TIMEOUT_MS ?? 60000);
     this.temperature = opts.temperature ?? 0.8;
+    // Reasoning models (qwen3, deepseek-r1) emit chain-of-thought before the
+    // final answer; the default LM Studio cap of ~150 tokens leaves an empty
+    // `content`. 2500 fits ~3KB of reasoning + a few-sentence Korean reply
+    // on 27B-class models with ~1KB of system prompt. Lower it (e.g. 600)
+    // for non-reasoning instruct models. Override via LM_STUDIO_MAX_TOKENS.
+    this.maxTokens = opts.maxTokens ?? Number(process.env.LM_STUDIO_MAX_TOKENS ?? 2500);
   }
 
   async chat(messages: ChatMessage[]): Promise<ChatResult> {
@@ -75,6 +83,7 @@ export class LLMClient {
       model: this.model,
       messages,
       temperature: this.temperature,
+      max_tokens: this.maxTokens,
       stream: false,
     });
 

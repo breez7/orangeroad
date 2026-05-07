@@ -96,6 +96,29 @@ export interface StorySlice {
 }
 
 /**
+ * Audio settings slice (Phase 5.2 — Issue #15 사운드/이펙트).
+ *
+ * The actual audio playback lives in `audio/AudioEngine.ts`; this slice is
+ * just the user-visible mixer state so the AudioPanel UI and SaveSystem can
+ * read/write it without poking into the engine. App.tsx holds an
+ * `useEffect` that listens to changes here and applies them to the
+ * AudioEngine instance.
+ */
+export interface AudioSlice {
+  /** 0..1 — applied to the music bus. */
+  musicVolume: number;
+  /** 0..1 — applied to the sfx bus. */
+  sfxVolume: number;
+  /** Hard mute (master gain → 0). Independent of the volume sliders so the
+   *  user can mute without losing their preferred levels. */
+  muted: boolean;
+  /** Whether the procedural BGM should play. Disabled by default so we
+   *  don't ever conflict with the browser autoplay policy unexpectedly —
+   *  the user opts in via the AudioPanel. */
+  bgmEnabled: boolean;
+}
+
+/**
  * Time slice (Phase 3.1 — FR-004).
  *
  * Holds a denormalised, ready-for-render snapshot of the game clock. The
@@ -190,6 +213,15 @@ interface GameStoreState {
   setNPCSchedules: (
     record: Record<string, { locationId: string | null; activity: string }>,
   ) => void;
+
+  // --- Phase 5.2 audio settings (Issue #15) -------------------------------
+  audio: AudioSlice;
+  setMusicVolume: (v: number) => void;
+  setSfxVolume: (v: number) => void;
+  setMuted: (m: boolean) => void;
+  setBgmEnabled: (b: boolean) => void;
+  /** Bulk replace — used by SaveSystem.load to restore audio prefs. */
+  setAudioSettings: (audio: Partial<AudioSlice>) => void;
 }
 
 const initialNPCs: Record<string, NPCStoreEntry> = Object.fromEntries(
@@ -245,8 +277,18 @@ const initialStory: StorySlice = {
   fireHistory: [],
 };
 
+// Phase 5.2 — sane mixing defaults. BGM disabled so we don't fight the
+// browser autoplay policy or surprise the player on first load; the user
+// opts in via the AudioPanel toggle.
+const initialAudio: AudioSlice = {
+  musicVolume: 0.3,
+  sfxVolume: 0.6,
+  muted: false,
+  bgmEnabled: false,
+};
+
 export const useGameStore = create<GameStoreState>((set) => ({
-  phase: '5.1',
+  phase: '5.2',
   currentLocationId: null,
   setCurrentLocation: (id) => set({ currentLocationId: id }),
   playerPosition: { x: 640, y: 360 },
@@ -449,4 +491,55 @@ export const useGameStore = create<GameStoreState>((set) => ({
       }
       return { npcSchedules: { ...record } };
     }),
+
+  // --- Phase 5.2 audio slice (Issue #15) ----------------------------------
+  audio: initialAudio,
+  setMusicVolume: (v) =>
+    set((state) => {
+      const clamped = clamp01(v);
+      if (state.audio.musicVolume === clamped) return state;
+      return { audio: { ...state.audio, musicVolume: clamped } };
+    }),
+  setSfxVolume: (v) =>
+    set((state) => {
+      const clamped = clamp01(v);
+      if (state.audio.sfxVolume === clamped) return state;
+      return { audio: { ...state.audio, sfxVolume: clamped } };
+    }),
+  setMuted: (m) =>
+    set((state) =>
+      state.audio.muted === m ? state : { audio: { ...state.audio, muted: m } },
+    ),
+  setBgmEnabled: (b) =>
+    set((state) =>
+      state.audio.bgmEnabled === b
+        ? state
+        : { audio: { ...state.audio, bgmEnabled: b } },
+    ),
+  // Bulk apply on save load. Each field is optional + clamped.
+  setAudioSettings: (audio) =>
+    set((state) => ({
+      audio: {
+        musicVolume:
+          audio.musicVolume !== undefined
+            ? clamp01(audio.musicVolume)
+            : state.audio.musicVolume,
+        sfxVolume:
+          audio.sfxVolume !== undefined
+            ? clamp01(audio.sfxVolume)
+            : state.audio.sfxVolume,
+        muted: audio.muted !== undefined ? audio.muted : state.audio.muted,
+        bgmEnabled:
+          audio.bgmEnabled !== undefined
+            ? audio.bgmEnabled
+            : state.audio.bgmEnabled,
+      },
+    })),
 }));
+
+function clamp01(v: number): number {
+  if (!Number.isFinite(v)) return 0;
+  if (v < 0) return 0;
+  if (v > 1) return 1;
+  return v;
+}

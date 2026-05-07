@@ -105,6 +105,20 @@ export const gameSaveV1Schema = z.object({
       fireHistory: z.array(z.string().min(1).max(64)).max(1024),
     })
     .optional(),
+  /**
+   * Phase 5.2 — user audio mixer settings (Issue #15). Optional for v1
+   * backward-compat with saves written before sound was added. All numeric
+   * fields are clamped to 0..1 by the schema; the FE further clamps on
+   * apply so a corrupted slider value can't blow the bus.
+   */
+  audio: z
+    .object({
+      musicVolume: z.number().min(0).max(1),
+      sfxVolume: z.number().min(0).max(1),
+      muted: z.boolean(),
+      bgmEnabled: z.boolean(),
+    })
+    .optional(),
 });
 
 export type GameSaveV1 = z.infer<typeof gameSaveV1Schema>;

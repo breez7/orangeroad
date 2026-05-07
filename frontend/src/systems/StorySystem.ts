@@ -49,15 +49,23 @@ import type { Player } from '@/entities/Player';
 import type { TimeSystem } from '@/systems/TimeSystem';
 import { findLocationAt } from '@/data/locations';
 import { useGameStore, type Emotion } from '@/store/gameStore';
+import type { AudioEngine } from '@/audio/AudioEngine';
+import type { EffectSystem } from '@/systems/EffectSystem';
 
 export interface StorySystemDeps {
   player: Player;
   timeSystem: TimeSystem;
+  /** Phase 5.2 — fire 'story-step' SFX on each step transition. */
+  audioEngine?: AudioEngine;
+  /** Phase 5.2 — spawn a surprise "!" cue when an event begins. */
+  effectSystem?: EffectSystem;
 }
 
 export class StorySystem {
   private readonly player: Player;
   private readonly timeSystem: TimeSystem;
+  private readonly audio: AudioEngine | null;
+  private readonly effects: EffectSystem | null;
   private destroyed = false;
   private booted = false;
 
@@ -74,6 +82,8 @@ export class StorySystem {
   constructor(deps: StorySystemDeps) {
     this.player = deps.player;
     this.timeSystem = deps.timeSystem;
+    this.audio = deps.audioEngine ?? null;
+    this.effects = deps.effectSystem ?? null;
   }
 
   /**
@@ -208,6 +218,14 @@ export class StorySystem {
     this.timeSystem.pause();
     const store = useGameStore.getState();
     store.startEvent(eventId);
+    // Phase 5.2 — story-step SFX on event begin + a subtle "!" cue at the
+    // player's current position (or stage center if we don't have one).
+    // The first dialog/narration step animates in via the StoryOverlay
+    // slide-up so the SFX + visual cue arrive together.
+    this.audio?.playSfx('story-step');
+    if (this.effects) {
+      this.effects.spawnSurprise(null, { x: this.player.x, y: this.player.y - 32 });
+    }
 
     // Drive the steps. Steps that need user input (narration / dialog) yield
     // back to the StoryOverlay which calls `confirmStep()` on click/Enter.
@@ -230,6 +248,10 @@ export class StorySystem {
 
     // Advance past the just-confirmed interactive step.
     store.advanceStep();
+    // Phase 5.2 — page-turn whoosh on each confirm. Played even if the
+    // next step is a side-effect step (no overlay tick); keeps tactile
+    // feedback consistent across step types.
+    this.audio?.playSfx('story-step');
     await this.runUntilWaitingForInput(script);
   }
 

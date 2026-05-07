@@ -6,6 +6,7 @@ import { TimeDisplay } from '@/ui/components/TimeDisplay';
 import { SaveSlotsPanel } from '@/ui/components/SaveSlotsPanel';
 import { StoryOverlay } from '@/ui/components/StoryOverlay';
 import { HelpPanel } from '@/ui/components/HelpPanel';
+import { AudioPanel } from '@/ui/components/AudioPanel';
 import { ToastContainer } from '@/ui/components/Toast';
 
 function App() {
@@ -34,6 +35,13 @@ function App() {
   const dialogEmotion = useGameStore((s) =>
     s.dialog.npcId ? (s.relationships[s.dialog.npcId]?.emotion ?? 'neutral') : 'neutral',
   );
+
+  // Phase 5.2 — audio-slice selectors. Each is a primitive so the parent's
+  // re-render churn is minimal. Used by the AudioEngine sync effect below.
+  const musicVolume = useGameStore((s) => s.audio.musicVolume);
+  const sfxVolume = useGameStore((s) => s.audio.sfxVolume);
+  const muted = useGameStore((s) => s.audio.muted);
+  const bgmEnabled = useGameStore((s) => s.audio.bgmEnabled);
 
   const hostRef = useRef<HTMLDivElement>(null);
   const gameRef = useRef<Game | null>(null);
@@ -77,6 +85,44 @@ function App() {
       game.destroy();
     };
   }, []);
+
+  // Phase 5.2 — one-time AudioEngine init on first user gesture.
+  //
+  // Browser autoplay policy: AudioContext can't start until the user has
+  // interacted with the page. We register a single document-level
+  // pointerdown + keydown listener that calls AudioEngine.init() and
+  // immediately removes itself. After init, the engine is responsive to
+  // every subsequent SFX call from anywhere in the app.
+  useEffect(() => {
+    const onFirstGesture = () => {
+      const game = gameRef.current;
+      if (game) game.audioEngine.init();
+      window.removeEventListener('pointerdown', onFirstGesture);
+      window.removeEventListener('keydown', onFirstGesture);
+    };
+    window.addEventListener('pointerdown', onFirstGesture);
+    window.addEventListener('keydown', onFirstGesture);
+    return () => {
+      window.removeEventListener('pointerdown', onFirstGesture);
+      window.removeEventListener('keydown', onFirstGesture);
+    };
+  }, []);
+
+  // Phase 5.2 — sync audio store slice → AudioEngine.
+  //
+  // This effect runs on every audio-slice change AND right after init (the
+  // engine's setters are no-ops until init succeeds, so an early run from
+  // a save-load before the first gesture won't break anything; a second
+  // run after the first gesture replays the apply).
+  useEffect(() => {
+    const engine = gameRef.current?.audioEngine;
+    if (!engine) return;
+    engine.setMusicVolume(musicVolume);
+    engine.setSfxVolume(sfxVolume);
+    engine.setMuted(muted);
+    if (bgmEnabled) engine.playBgm();
+    else engine.stopBgm();
+  }, [musicVolume, sfxVolume, muted, bgmEnabled]);
 
   // Imperative bridge: React's onSend fires the DialogSystem.send() on the
   // active scene. Stable callback so the <DialogBox /> input doesn't churn.
@@ -191,6 +237,8 @@ function App() {
         <SaveSlotsPanel
           open={saveOpen}
           saveSystem={gameRef.current?.saveSystem ?? null}
+          effectSystem={gameRef.current?.effectSystem ?? null}
+          audioEngine={gameRef.current?.audioEngine ?? null}
           onClose={handleCloseSave}
         />
 
@@ -201,6 +249,8 @@ function App() {
 
         {/* Phase 5.1 — UX affordances. */}
         <HelpPanel />
+        {/* Phase 5.2 — audio mixer (Issue #15). */}
+        <AudioPanel />
       </div>
 
       {/* Toasts live outside `.ui-overlay` so they aren't constrained by its

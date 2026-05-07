@@ -106,6 +106,10 @@ export class SaveSystem {
       // (mid-event saves restart from the next eligible event on load).
       flags: { ...state.flags },
       story: { fireHistory: [...state.story.fireHistory] },
+      // Phase 5.2 — audio mixer settings (Issue #15). Optional on v1; we
+      // always emit on new saves so a save→load round-trip preserves the
+      // user's volume / mute / bgm-enabled choices.
+      audio: { ...state.audio },
     };
     if (label !== undefined && label.length > 0) {
       payload.label = label;
@@ -219,6 +223,15 @@ export class SaveSystem {
     // save doesn't leak flags from a previous game session.
     store.setFlags(payload.flags ?? {});
     store.setStoryFireHistory(payload.story?.fireHistory ?? []);
+
+    // Phase 5.2 — restore audio mixer settings. Missing on older saves;
+    // when present we apply each field. The actual AudioEngine sync is
+    // handled by App.tsx's effect listener on the audio slice (so the
+    // engine reflects the just-applied values without coupling SaveSystem
+    // to the engine instance).
+    if (payload.audio) {
+      store.setAudioSettings(payload.audio);
+    }
 
     // 3. Scene entities — teleport AFTER store updates so the position
     //    overlay reads the new value on the next selector tick.

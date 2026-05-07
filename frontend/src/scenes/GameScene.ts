@@ -10,8 +10,15 @@ import { TimeSystem } from '@/systems/TimeSystem';
 import { SaveSystem } from '@/systems/SaveSystem';
 import { StorySystem } from '@/systems/StorySystem';
 import { ScheduleSystem } from '@/systems/ScheduleSystem';
+import { EffectSystem } from '@/systems/EffectSystem';
+import type { AudioEngine } from '@/audio/AudioEngine';
 import { findLocationAt } from '@/data/locations';
 import { useGameStore } from '@/store/gameStore';
+
+export interface GameSceneOptions {
+  /** Phase 5.2 — shared AudioEngine. Owned by Game.ts, passed in here. */
+  audioEngine: AudioEngine;
+}
 
 export class GameScene {
   readonly root: Container;
@@ -31,11 +38,13 @@ export class GameScene {
   readonly story: StorySystem;
   /** Phase 4.2 — NPC daily schedule + teleport-on-minute (FR-009). */
   readonly schedule: ScheduleSystem;
+  /** Phase 5.2 — particle effects (hearts / sparkles / clouds / surprise). */
+  readonly effects: EffectSystem;
   private readonly locations: Location[] = [];
   private readonly movement: MovementSystem;
   private readonly npcLayer: Container;
 
-  constructor() {
+  constructor(opts: GameSceneOptions) {
     this.root = new Container();
     this.root.label = 'game-scene';
 
@@ -82,13 +91,26 @@ export class GameScene {
     this.root.addChild(this.player.view);
     useGameStore.getState().setPlayerPosition({ x: spawn.x, y: spawn.y });
 
+    // Phase 5.2 — effect system. Layer is added to the scene root above
+    // the NPC layer so particles render on top of entities. Constructed
+    // before DialogSystem / StorySystem so we can pass it in for
+    // affinity / story cue effects.
+    this.effects = new EffectSystem({
+      parent: this.root,
+      entityManager: this.entityManager,
+    });
+
     // Phase 2.3 — DialogSystem owns NPC-talk interaction state. It is
     // stateless w.r.t. UI (state lives in the Zustand store) and is wired
     // into MovementSystem as a click-interceptor so clicking an NPC in
     // range opens the dialog instead of walking past them.
+    // Phase 5.2 — also receives the AudioEngine + EffectSystem so a
+    // successful talk turn can fire the matching SFX + particles.
     this.dialog = new DialogSystem({
       player: this.player,
       entityManager: this.entityManager,
+      audioEngine: opts.audioEngine,
+      effectSystem: this.effects,
     });
 
     // Phase 3.1 — game clock. Defaults to day 1 (Monday) 08:00 with the
@@ -108,9 +130,14 @@ export class GameScene {
     // Phase 4.1 — story system. Subscribes to the store + drives event
     // playback. boot() runs the ON_START pass async so an unstarted intro
     // fires after the scene is on screen.
+    // Phase 5.2 — also receives the AudioEngine + EffectSystem so events
+    // can play a "story-step" SFX on each step + a surprise visual cue
+    // when an event begins.
     this.story = new StorySystem({
       player: this.player,
       timeSystem: this.time,
+      audioEngine: opts.audioEngine,
+      effectSystem: this.effects,
     });
     void this.story.boot();
 
@@ -163,6 +190,9 @@ export class GameScene {
     // TimeSystem.pause() (called by StorySystem during scripted playback)
     // makes update() a no-op while a story event is playing.
     this.time.update(dt);
+    // Phase 5.2 — tick particle effects. EffectSystem is a no-op when the
+    // pool is empty so this costs near-zero per frame between bursts.
+    this.effects.update(dt);
     if (this.player.isMoving) {
       const px = this.player.x;
       const py = this.player.y;
@@ -202,6 +232,11 @@ export class GameScene {
     this.story.destroy();
     // Phase 4.2 — tear down schedule system (unsubscribe + abort fetch).
     this.schedule.destroy();
+    // Phase 5.2 — destroy any in-flight particles before the scene root
+    // tears down. The effects layer is a child of root so the root.destroy
+    // below would cascade-clean it anyway, but explicit teardown clears
+    // the in-memory particle list too.
+    this.effects.destroy();
     useGameStore.getState().closeDialog();
     // Tear down NPCs before the parent container goes away so each NPC's
     // own destroy() runs (StrictMode-safe re-init).

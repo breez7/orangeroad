@@ -2,12 +2,18 @@ import type { Player } from '@/entities/Player';
 import type { EntityManager } from '@/entities/EntityManager';
 import { APIError, getNPCContext, getRelationship, talkToNPC } from '@/api/client';
 import { useGameStore } from '@/store/gameStore';
+import type { AudioEngine } from '@/audio/AudioEngine';
+import type { EffectSystem } from '@/systems/EffectSystem';
 
 export interface DialogSystemOptions {
   player: Player;
   entityManager: EntityManager;
   /** Click radius (town-coords) within which an NPC click opens dialog. */
   interactRadius?: number;
+  /** Phase 5.2 — fire SFX on dialog open / send / reply / affinity change. */
+  audioEngine?: AudioEngine;
+  /** Phase 5.2 — spawn affinity hearts/clouds on a successful talk turn. */
+  effectSystem?: EffectSystem;
 }
 
 /** Default interaction radius — Player.RADIUS (16) + NPC.RADIUS (16) + 48 px slack. */
@@ -39,6 +45,8 @@ export class DialogSystem {
   private readonly player: Player;
   private readonly entityManager: EntityManager;
   private readonly interactRadius: number;
+  private readonly audio: AudioEngine | null;
+  private readonly effects: EffectSystem | null;
   private inflight: AbortController | null = null;
   private destroyed = false;
 
@@ -46,6 +54,8 @@ export class DialogSystem {
     this.player = opts.player;
     this.entityManager = opts.entityManager;
     this.interactRadius = opts.interactRadius ?? DEFAULT_INTERACT_RADIUS;
+    this.audio = opts.audioEngine ?? null;
+    this.effects = opts.effectSystem ?? null;
   }
 
   /** Whether the dialog is currently open (mirrors store). */
@@ -112,6 +122,8 @@ export class DialogSystem {
     // would otherwise race the response into the new conversation.
     this.cancelInflight();
     store.openDialog(npcId);
+    // Phase 5.2 — soft chime when the dialog opens.
+    this.audio?.playSfx('dialog-open');
     // Fire-and-forget: load any persisted backend history so re-opening a
     // conversation shows prior turns (FR-003 "감정 상태는 지속된다 — 세션
     // 간 유지"). Failures are silent — the dialog still functions with an
@@ -192,6 +204,9 @@ export class DialogSystem {
     store.appendDialogTurn('user', trimmed);
     store.setDialogWaiting(true);
     store.setDialogError(null);
+    // Phase 5.2 — gentle pop when the player sends. Fired before the
+    // network call so input feels immediately responsive.
+    this.audio?.playSfx('dialog-send');
 
     this.cancelInflight();
     const ctrl = new AbortController();
@@ -220,6 +235,18 @@ export class DialogSystem {
           lastUpdated: result.relationship.lastUpdated,
         });
       }
+
+      // Phase 5.2 — feedback layer.
+      //   1. Always: a soft "ping" so the user knows a reply landed even if
+      //      they're scrolled away. Fired BEFORE the affinity SFX so the
+      //      arpeggio plays clearly on top.
+      //   2. Affinity change: dedicated SFX + particle burst over the NPC.
+      //      Sign-of-delta picks up vs down — delta === 0 is silent.
+      this.audio?.playSfx('npc-reply');
+      const delta = result.affinityChange ?? 0;
+      if (delta > 0) this.audio?.playSfx('affinity-up');
+      else if (delta < 0) this.audio?.playSfx('affinity-down');
+      this.effects?.spawnAffinityEffect(npcId, delta);
     } catch (err) {
       if (this.destroyed) return;
       const post = useGameStore.getState();

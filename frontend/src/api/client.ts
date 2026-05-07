@@ -288,6 +288,17 @@ export interface GameSavePayload {
   flags?: Record<string, FlagValue>;
   /** Phase 4.1 — fired-events history (optional for v1 backward-compat). */
   story?: { fireHistory: string[] };
+  /**
+   * Phase 5.2 — user audio mixer settings (Issue #15). Optional for v1
+   * backward-compat with pre-Phase-5.2 saves; missing fields fall back to
+   * the in-store defaults on load.
+   */
+  audio?: {
+    musicVolume: number;
+    sfxVolume: number;
+    muted: boolean;
+    bgmEnabled: boolean;
+  };
 }
 
 export interface SaveListResult {

@@ -3,7 +3,10 @@ import type { SaveSummary } from '@/api/client';
 import { APIError } from '@/api/client';
 import type { SaveSystem } from '@/systems/SaveSystem';
 import { SaveError } from '@/systems/SaveSystem';
+import type { EffectSystem } from '@/systems/EffectSystem';
+import type { AudioEngine } from '@/audio/AudioEngine';
 import { useToast } from '@/ui/components/Toast';
+import { TOWN_BOUNDS } from '@/data/locations';
 
 /**
  * SaveSlotsPanel (Phase 3.2 — FR-008).
@@ -82,10 +85,21 @@ function errorMessage(err: unknown): string {
 export interface SaveSlotsPanelProps {
   open: boolean;
   saveSystem: SaveSystem | null;
+  /** Phase 5.2 — sparkle burst on save success. Optional so the panel still
+   *  works in tests without the visual layer. */
+  effectSystem?: EffectSystem | null;
+  /** Phase 5.2 — confirmation SFX + click SFX on actions. */
+  audioEngine?: AudioEngine | null;
   onClose: () => void;
 }
 
-export function SaveSlotsPanel({ open, saveSystem, onClose }: SaveSlotsPanelProps) {
+export function SaveSlotsPanel({
+  open,
+  saveSystem,
+  effectSystem,
+  audioEngine,
+  onClose,
+}: SaveSlotsPanelProps) {
   const toast = useToast();
   const [slots, setSlots] = useState<SaveSummary[]>([]);
   // `busyAction` distinguishes save / load / delete so the corresponding
@@ -161,12 +175,23 @@ export function SaveSlotsPanel({ open, saveSystem, onClose }: SaveSlotsPanelProp
   const handleSave = useCallback(
     async (slotId: string) => {
       if (!saveSystem) return;
+      // Phase 5.2 — UI click SFX (subtle). Fired immediately so the user
+      // gets feedback before the network round-trip completes.
+      audioEngine?.playSfx('click');
       setBusySlot(slotId);
       setBusyAction('save');
       setStatus({ kind: 'idle' });
       try {
         await saveSystem.save(slotId);
         toast.success(`${slotId}에 저장했습니다.`);
+        // Phase 5.2 — celebrate the save with a sparkle burst at stage
+        // center + confirmation chime. Town-local center is fine because
+        // the effects layer is inside the scene root which is scaled by
+        // GameScene.fitTo — burst visually centers on the playfield.
+        audioEngine?.playSfx('save');
+        if (effectSystem) {
+          effectSystem.spawnSparkles(TOWN_BOUNDS.width / 2, TOWN_BOUNDS.height / 2);
+        }
         refresh();
       } catch (err) {
         toast.error(errorMessage(err));
@@ -175,12 +200,13 @@ export function SaveSlotsPanel({ open, saveSystem, onClose }: SaveSlotsPanelProp
         setBusyAction(null);
       }
     },
-    [saveSystem, refresh, toast],
+    [saveSystem, refresh, toast, audioEngine, effectSystem],
   );
 
   const handleLoad = useCallback(
     async (slotId: string) => {
       if (!saveSystem) return;
+      audioEngine?.playSfx('click');
       setBusySlot(slotId);
       setBusyAction('load');
       setStatus({ kind: 'idle' });
@@ -197,7 +223,7 @@ export function SaveSlotsPanel({ open, saveSystem, onClose }: SaveSlotsPanelProp
         setBusyAction(null);
       }
     },
-    [saveSystem, toast, onClose],
+    [saveSystem, toast, onClose, audioEngine],
   );
 
   const handleDelete = useCallback(
@@ -205,6 +231,7 @@ export function SaveSlotsPanel({ open, saveSystem, onClose }: SaveSlotsPanelProp
       if (!saveSystem) return;
       // Avoid window.confirm during dialog interactions — friends-only
       // deployment, low risk if mis-clicked, and undoable by re-saving.
+      audioEngine?.playSfx('click');
       setBusySlot(slotId);
       setBusyAction('delete');
       setStatus({ kind: 'idle' });
@@ -219,7 +246,7 @@ export function SaveSlotsPanel({ open, saveSystem, onClose }: SaveSlotsPanelProp
         setBusyAction(null);
       }
     },
-    [saveSystem, refresh, toast],
+    [saveSystem, refresh, toast, audioEngine],
   );
 
   if (!open) return null;

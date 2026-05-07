@@ -3,6 +3,8 @@ import { GameScene } from '@/scenes/GameScene';
 import type { DialogSystem } from '@/systems/DialogSystem';
 import type { SaveSystem } from '@/systems/SaveSystem';
 import type { StorySystem } from '@/systems/StorySystem';
+import type { EffectSystem } from '@/systems/EffectSystem';
+import { AudioEngine } from '@/audio/AudioEngine';
 
 export class Game {
   private app: Application | null = null;
@@ -10,6 +12,13 @@ export class Game {
   private resizeObserver: ResizeObserver | null = null;
   private destroyed = false;
   private tickHandler: ((ticker: Ticker) => void) | null = null;
+  /**
+   * Phase 5.2 — single AudioEngine instance owned by the Game (one
+   * AudioContext per page, regardless of scene rebuilds in StrictMode).
+   * The engine is constructed eagerly but its underlying AudioContext is
+   * lazy-init'd on the first user gesture per the autoplay policy.
+   */
+  private readonly audio = new AudioEngine();
 
   /** Currently-active scene (or null before init / after destroy). */
   get currentScene(): GameScene | null {
@@ -29,6 +38,16 @@ export class Game {
   /** Phase 4.1 — accessor for the story system on the active scene (FR-006). */
   get storySystem(): StorySystem | null {
     return this.scene?.story ?? null;
+  }
+
+  /** Phase 5.2 — accessor for the effect system on the active scene. */
+  get effectSystem(): EffectSystem | null {
+    return this.scene?.effects ?? null;
+  }
+
+  /** Phase 5.2 — shared AudioEngine. Guaranteed non-null after Game construction. */
+  get audioEngine(): AudioEngine {
+    return this.audio;
   }
 
   async init(host: HTMLElement): Promise<void> {
@@ -54,7 +73,9 @@ export class Game {
     this.app = app;
     host.appendChild(app.canvas);
 
-    this.scene = new GameScene();
+    // Phase 5.2 — pass shared AudioEngine + visual EffectSystem owner so
+    // GameScene can wire them into DialogSystem / StorySystem.
+    this.scene = new GameScene({ audioEngine: this.audio });
     app.stage.addChild(this.scene.root);
     this.scene.fitTo(app.screen.width, app.screen.height);
 
@@ -92,5 +113,9 @@ export class Game {
       if (canvas?.parentNode) canvas.parentNode.removeChild(canvas);
       this.app = null;
     }
+
+    // Phase 5.2 — close the AudioContext last so any in-flight SFX (rare,
+    // but possible if a teardown lands mid-step) get cleaned up.
+    this.audio.destroy();
   }
 }

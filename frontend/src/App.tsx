@@ -22,6 +22,16 @@ function App() {
     s.dialog.npcId ? (s.npcs[s.dialog.npcId]?.name ?? null) : null,
   );
 
+  // Phase 3.3 — relationship slice for the open NPC. Defaults are returned
+  // when no entry exists yet (e.g. before the first talk turn syncs the
+  // server state) so the UI never has to handle undefined.
+  const dialogAffinity = useGameStore((s) =>
+    s.dialog.npcId ? (s.relationships[s.dialog.npcId]?.affinity ?? 50) : 50,
+  );
+  const dialogEmotion = useGameStore((s) =>
+    s.dialog.npcId ? (s.relationships[s.dialog.npcId]?.emotion ?? 'neutral') : 'neutral',
+  );
+
   const hostRef = useRef<HTMLDivElement>(null);
   const gameRef = useRef<Game | null>(null);
 
@@ -91,6 +101,8 @@ function App() {
           history={dialogHistory}
           isWaiting={dialogWaiting}
           error={dialogError}
+          affinity={dialogAffinity}
+          emotion={dialogEmotion}
           onSend={handleSend}
           onClose={handleClose}
         />

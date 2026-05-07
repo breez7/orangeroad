@@ -6,6 +6,7 @@ import { createNPCRoutes } from '@/routes/npc';
 import { createSaveRoutes } from '@/routes/save';
 import { LLMClient } from '@/ai/LLMClient';
 import { ContextManager } from '@/ai/ContextManager';
+import { RelationshipManager } from '@/ai/RelationshipManager';
 import { NPCService } from '@/services/NPCService';
 import { SaveStorage } from '@/storage/SaveStorage';
 import { SaveService } from '@/services/SaveService';
@@ -31,16 +32,18 @@ app.use(
 );
 
 // --- Phase 2.2 wiring: build singletons once and inject into route factory.
+// Phase 3.3 adds RelationshipManager so NPCService can read/update affinity.
 const llmClient = new LLMClient();
 const contextManager = new ContextManager();
-const npcService = new NPCService(llmClient, contextManager);
+const relationshipManager = new RelationshipManager();
+const npcService = new NPCService(llmClient, contextManager, relationshipManager);
 
 // --- Phase 3.2 wiring: SaveStorage + SaveService for FR-008 save/load.
 const saveStorage = new SaveStorage();
 const saveService = new SaveService({ storage: saveStorage });
 
 app.get('/', (c) =>
-  c.json({ name: 'orangeroad-backend', version: '0.1.0', phase: '3.2' }),
+  c.json({ name: 'orangeroad-backend', version: '0.1.0', phase: '3.3' }),
 );
 
 app.get('/health', (c) =>

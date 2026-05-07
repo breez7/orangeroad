@@ -1,6 +1,6 @@
 import type { Player } from '@/entities/Player';
 import type { EntityManager } from '@/entities/EntityManager';
-import { APIError, getNPCContext, talkToNPC } from '@/api/client';
+import { APIError, getNPCContext, getRelationship, talkToNPC } from '@/api/client';
 import { useGameStore } from '@/store/gameStore';
 
 export interface DialogSystemOptions {
@@ -117,6 +117,29 @@ export class DialogSystem {
     // 간 유지"). Failures are silent — the dialog still functions with an
     // empty in-session history if the backend is offline.
     void this.loadPriorContext(npcId);
+    // Phase 3.3 — also pull current relationship state so the affinity
+    // indicator shows the persisted value, not the in-memory default.
+    void this.loadRelationship(npcId);
+  }
+
+  private async loadRelationship(npcId: string): Promise<void> {
+    if (this.destroyed) return;
+    try {
+      const rel = await getRelationship(npcId);
+      if (this.destroyed) return;
+      const post = useGameStore.getState();
+      // Only commit if the user is still on this NPC. Avoids overwriting
+      // a relationship that just got updated by a concurrent talk turn.
+      if (!post.dialog.open || post.dialog.npcId !== npcId) return;
+      post.setRelationship(npcId, {
+        npcId: rel.npcId,
+        affinity: rel.affinity,
+        emotion: rel.emotion,
+        lastUpdated: rel.lastUpdated,
+      });
+    } catch {
+      // Backend offline / 404 — keep current store defaults.
+    }
   }
 
   private async loadPriorContext(npcId: string): Promise<void> {
@@ -185,6 +208,18 @@ export class DialogSystem {
       // just appended). Replace local history with the server's truth so
       // timestamps + ordering match the persisted context.
       post.setDialogHistory(result.history);
+
+      // Phase 3.3 — sync relationship slice from the server's authoritative
+      // post-turn state. The field is optional on the wire (older Phase 2.2
+      // backend wouldn't send it) so guard against undefined.
+      if (result.relationship) {
+        post.setRelationship(npcId, {
+          npcId: result.relationship.npcId,
+          affinity: result.relationship.affinity,
+          emotion: result.relationship.emotion,
+          lastUpdated: result.relationship.lastUpdated,
+        });
+      }
     } catch (err) {
       if (this.destroyed) return;
       const post = useGameStore.getState();

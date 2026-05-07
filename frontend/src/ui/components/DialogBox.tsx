@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
-import type { DialogHistoryEntry } from '@/store/gameStore';
+import type { DialogHistoryEntry, Emotion } from '@/store/gameStore';
+import { AffinityIndicator } from '@/ui/components/AffinityIndicator';
 
 export interface DialogBoxProps {
   open: boolean;
@@ -8,6 +9,10 @@ export interface DialogBoxProps {
   history: DialogHistoryEntry[];
   isWaiting: boolean;
   error: string | null;
+  /** Phase 3.3 — current affinity with the open NPC (0-100). */
+  affinity: number;
+  /** Phase 3.3 — current emotion of the open NPC. */
+  emotion: Emotion;
   onSend: (message: string) => void;
   onClose: () => void;
 }
@@ -41,6 +46,8 @@ export function DialogBox({
   history,
   isWaiting,
   error,
+  affinity,
+  emotion,
   onSend,
   onClose,
 }: DialogBoxProps) {
@@ -103,11 +110,15 @@ export function DialogBox({
       aria-modal="false"
       aria-label={`${npcName ?? npcId}와의 대화`}
     >
-      {/* Header */}
-      <div className="flex items-center justify-between mb-2">
-        <h3 className="text-base font-bold text-orange-primary">
+      {/* Header — name + affinity/emotion indicator + close button. */}
+      <div className="flex items-center justify-between gap-3 mb-2">
+        <h3 className="text-base font-bold text-orange-primary shrink-0">
           {npcName ?? npcId}
         </h3>
+        {/* Phase 3.3 — affinity + emotion at-a-glance (FR-007). */}
+        <div className="flex-1 flex justify-end">
+          <AffinityIndicator affinity={affinity} emotion={emotion} />
+        </div>
         <button
           type="button"
           onClick={onClose}

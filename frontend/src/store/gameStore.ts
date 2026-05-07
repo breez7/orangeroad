@@ -2,6 +2,30 @@ import { create } from 'zustand';
 import { NPCS } from '@/data/npcs';
 import type { DayOfWeek } from '@/systems/TimeSystem';
 
+/**
+ * Coarse emotion taxonomy — must stay in sync with backend
+ * `backend/src/models/Relationship.ts`. Duplicated here rather than
+ * imported across the package boundary to keep the FE self-contained.
+ */
+export type Emotion =
+  | 'neutral'
+  | 'happy'
+  | 'sad'
+  | 'angry'
+  | 'shy'
+  | 'flirty'
+  | 'annoyed';
+
+/** Phase 3.3 — per-NPC relationship state slice. Mirrors backend RelationshipData. */
+export interface RelationshipEntry {
+  npcId: string;
+  /** 0-100 affinity, default 50. */
+  affinity: number;
+  emotion: Emotion;
+  /** Epoch ms of the last server update we know about. */
+  lastUpdated: number;
+}
+
 export interface PlayerPosition {
   x: number;
   y: number;
@@ -85,6 +109,15 @@ interface GameStoreState {
   /** Phase 3.1 time slice. */
   time: TimeSlice;
   setTime: (t: TimeSlice) => void;
+
+  /**
+   * Phase 3.3 relationship slice (FR-007). One entry per known NPC. Updated
+   * by DialogSystem after every successful talk turn; bulk-restored from a
+   * save payload via setRelationships.
+   */
+  relationships: Record<string, RelationshipEntry>;
+  setRelationship: (npcId: string, data: RelationshipEntry) => void;
+  setRelationships: (record: Record<string, RelationshipEntry>) => void;
 }
 
 const initialNPCs: Record<string, NPCStoreEntry> = Object.fromEntries(
@@ -119,8 +152,23 @@ const initialTime: TimeSlice = {
   phaseLabel: '오전 수업',
 };
 
+// Phase 3.3 — initialise relationships from the NPC roster with the same
+// "neutral acquaintance" defaults the backend uses (affinity 50, neutral).
+// Backend persists per-NPC; this is the in-memory snapshot the UI reads.
+const initialRelationships: Record<string, RelationshipEntry> = Object.fromEntries(
+  NPCS.map((def) => [
+    def.id,
+    {
+      npcId: def.id,
+      affinity: 50,
+      emotion: 'neutral' as const,
+      lastUpdated: 0,
+    },
+  ]),
+);
+
 export const useGameStore = create<GameStoreState>((set) => ({
-  phase: '3.2',
+  phase: '3.3',
   currentLocationId: null,
   setCurrentLocation: (id) => set({ currentLocationId: id }),
   playerPosition: { x: 640, y: 360 },
@@ -187,4 +235,34 @@ export const useGameStore = create<GameStoreState>((set) => ({
       }
       return { time: t };
     }),
+
+  // Phase 3.3 — relationship slice (FR-007).
+  relationships: initialRelationships,
+
+  // Per-NPC merge: shallow compare so a no-op update doesn't churn React
+  // subscribers. The DialogSystem call after every talk turn passes the
+  // server's canonical state so we just replace the entry.
+  setRelationship: (npcId, data) =>
+    set((state) => {
+      const cur = state.relationships[npcId];
+      if (
+        cur &&
+        cur.affinity === data.affinity &&
+        cur.emotion === data.emotion &&
+        cur.lastUpdated === data.lastUpdated
+      ) {
+        return state;
+      }
+      return {
+        relationships: { ...state.relationships, [npcId]: data },
+      };
+    }),
+
+  // Bulk replace — used by SaveSystem.load to restore the slice atomically.
+  // Missing NPCs in the payload retain their current (default) values rather
+  // than being deleted, so old v1 saves stay backward-compatible.
+  setRelationships: (record) =>
+    set((state) => ({
+      relationships: { ...state.relationships, ...record },
+    })),
 }));

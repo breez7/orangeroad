@@ -3,20 +3,34 @@
  *
  * Flow per DESIGN.md §"NPC Interaction Flow":
  *   1. load character profile
- *   2. load conversation context
- *   3. build prompt
+ *   2. load conversation context AND relationship state (Phase 3.3)
+ *   3. build prompt — including current emotion + affinity (Phase 3.3)
  *   4. call LM Studio (LLMClient)
  *   5. append user msg + AI response to context
- *   6. return response + recent history
+ *   6. derive affinityChange + new emotion via AffinityHeuristic (Phase 3.3)
+ *   7. persist updated relationship
+ *   8. return response + recent history + emotionUpdate + affinityChange + relationship
  *
- * Phase 2.2 deliberately does NOT compute emotion/affinity deltas — those
- * land in Phase 3.3. The response is plain text only.
+ * Phase 3.3 changes (from 2.2):
+ *  - Pulls current relationship via RelationshipManager and feeds emotion +
+ *    affinity into the prompt (FR-002 emotional response).
+ *  - After the LLM call, runs deterministic keyword heuristic on the turn
+ *    and persists the new affinity/emotion.
+ *  - Surfaces emotionUpdate / affinityChange / relationship to the client so
+ *    UI can render without a follow-up fetch.
  */
 
 import { resolve } from 'node:path';
 import type { LLMClient } from '@/ai/LLMClient';
 import type { ContextManager, NPCHistoryEntry } from '@/ai/ContextManager';
+import type { RelationshipManager } from '@/ai/RelationshipManager';
 import { buildPrompt, type CharacterProfile } from '@/ai/PromptBuilder';
+import { deriveAffinityChange } from '@/ai/AffinityHeuristic';
+import {
+  clampAffinity,
+  type Emotion,
+  type RelationshipData,
+} from '@/models/Relationship';
 
 export class NPCNotFoundError extends Error {
   constructor(npcId: string) {
@@ -34,6 +48,12 @@ export interface TalkResult {
   npcId: string;
   response: string;
   history: NPCHistoryEntry[];
+  /** Phase 3.3 — current dominant emotion AFTER this turn. */
+  emotionUpdate: Emotion;
+  /** Phase 3.3 — signed delta applied this turn (already clamped). */
+  affinityChange: number;
+  /** Phase 3.3 — full relationship state after the update, for client sync. */
+  relationship: RelationshipData;
 }
 
 export interface NPCServiceOptions {
@@ -52,6 +72,7 @@ export class NPCService {
   constructor(
     private readonly llm: LLMClient,
     private readonly context: ContextManager,
+    private readonly relationships: RelationshipManager,
     opts?: Partial<NPCServiceOptions>,
   ) {
     // Default points at the bundled `backend/src/data/characters/` directory.
@@ -109,28 +130,77 @@ export class NPCService {
     await this.context.clear(npcId);
   }
 
+  // --- Phase 3.3 relationship surface -------------------------------------
+
+  /**
+   * Get current relationship state, creating a default if missing. Throws
+   * NPCNotFoundError if the npcId doesn't correspond to a known profile.
+   */
+  async getRelationship(npcId: string): Promise<RelationshipData> {
+    await this.loadProfile(npcId);
+    return this.relationships.load(npcId);
+  }
+
+  /** Reset relationship to default. Throws NPCNotFoundError on unknown id. */
+  async clearRelationship(npcId: string): Promise<RelationshipData> {
+    await this.loadProfile(npcId);
+    return this.relationships.clear(npcId);
+  }
+
+  /** Snapshot of every persisted relationship (used by SaveService). */
+  async getAllRelationships(): Promise<Map<string, RelationshipData>> {
+    return this.relationships.getAll();
+  }
+
+  // --- talk ---------------------------------------------------------------
+
   async talk({ npcId, message }: TalkArgs): Promise<TalkResult> {
     const profile = await this.loadProfile(npcId);
     const ctx = await this.context.load(npcId);
+    const rel = await this.relationships.load(npcId);
 
     const messages = buildPrompt({
       npc: profile,
       history: ctx.history,
       userMessage: message,
+      emotion: rel.emotion,
+      affinity: rel.affinity,
     });
 
-    // Throws LLMError on failure — caller maps to 503.
+    // Throws LLMError on failure — caller maps to 503. We deliberately
+    // do NOT update relationship state on LLM failure; affinity should
+    // only move on successful turns.
     const result = await this.llm.chat(messages);
 
     // Persist both turns in a single locked write so a disk hiccup can never
     // leave an orphan user turn without its matching assistant reply.
     await this.context.appendTurn(npcId, message, result.content);
 
+    // Derive deterministic affinity delta + new emotion from the turn.
+    const { affinityChange, emotion } = deriveAffinityChange({
+      userMessage: message,
+      npcResponse: result.content,
+      currentEmotion: rel.emotion,
+    });
+
+    const newAffinity = clampAffinity(rel.affinity + affinityChange);
+    // Re-derive the actual signed delta after clamping so the UI sees the
+    // visible movement, not the pre-clamp value (e.g. 99 + 3 → 100, delta=1).
+    const visibleChange = newAffinity - rel.affinity;
+
+    const updated = await this.relationships.update(npcId, {
+      affinity: newAffinity,
+      emotion,
+    });
+
     const recent = await this.context.recent(npcId, this.recentHistorySize);
     return {
       npcId,
       response: result.content,
       history: recent,
+      emotionUpdate: updated.emotion,
+      affinityChange: visibleChange,
+      relationship: updated,
     };
   }
 }

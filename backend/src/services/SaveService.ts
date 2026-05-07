@@ -26,6 +26,7 @@
 
 import { z, ZodError } from 'zod';
 import type { SaveStorage, SaveSlotInfo } from '@/storage/SaveStorage';
+import { relationshipDataSchema } from '@/models/Relationship';
 
 // --- Schema -----------------------------------------------------------------
 
@@ -60,6 +61,10 @@ const npcEntrySchema = z.object({
 /**
  * Versioned save envelope. `version` is a literal `1` — adding a new shape
  * later means bumping this and writing a migrator, not extending in-place.
+ *
+ * Phase 3.3 note: `relationships` is OPTIONAL on v1 so existing v1 saves from
+ * Phase 3.2 still load cleanly. New saves include the field; the loader on
+ * the frontend defaults missing entries to `{ affinity: 50, emotion: 'neutral' }`.
  */
 export const gameSaveV1Schema = z.object({
   version: z.literal(1),
@@ -74,6 +79,11 @@ export const gameSaveV1Schema = z.object({
   /** Map of NPC id → store-shape entry. */
   npcs: z.record(z.string(), npcEntrySchema),
   currentLocationId: z.string().min(1).max(64).nullable(),
+  /**
+   * Phase 3.3 — per-NPC relationship state. Optional for backward-compat
+   * with v1 saves written before this phase.
+   */
+  relationships: z.record(z.string(), relationshipDataSchema).optional(),
 });
 
 export type GameSaveV1 = z.infer<typeof gameSaveV1Schema>;

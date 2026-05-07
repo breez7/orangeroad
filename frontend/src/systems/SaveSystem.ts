@@ -23,13 +23,14 @@ import {
   listSaves,
   loadSave,
   type GameSavePayload,
+  type RelationshipPayload,
   type SaveCreateResult,
   type SaveListResult,
   type SaveSummary,
 } from '@/api/client';
 import type { Player } from '@/entities/Player';
 import type { EntityManager } from '@/entities/EntityManager';
-import { useGameStore, type NPCStoreEntry } from '@/store/gameStore';
+import { useGameStore, type NPCStoreEntry, type RelationshipEntry } from '@/store/gameStore';
 import type { TimeSystem } from '@/systems/TimeSystem';
 
 export class SaveError extends Error {
@@ -85,6 +86,20 @@ export class SaveSystem {
         ]),
       ),
       currentLocationId: state.currentLocationId,
+      // Phase 3.3 — include relationships in the payload. Spread copies the
+      // primitives so future store mutations don't bleed into the captured
+      // snapshot.
+      relationships: Object.fromEntries(
+        Object.entries(state.relationships).map(([id, rel]) => [
+          id,
+          {
+            npcId: rel.npcId,
+            affinity: rel.affinity,
+            emotion: rel.emotion,
+            lastUpdated: rel.lastUpdated,
+          },
+        ]),
+      ),
     };
     if (label !== undefined && label.length > 0) {
       payload.label = label;
@@ -175,6 +190,23 @@ export class SaveSystem {
       };
     }
     store.setNPCs(restored);
+
+    // Phase 3.3 — relationship slice. v1 saves written before Phase 3.3
+    // omit this field; in that case we keep whatever defaults the store
+    // currently has (initialised from the NPC roster). New saves override
+    // per-NPC; missing entries stay at their defaults.
+    if (payload.relationships) {
+      const rels: Record<string, RelationshipEntry> = {};
+      for (const [id, rel] of Object.entries<RelationshipPayload>(payload.relationships)) {
+        rels[id] = {
+          npcId: rel.npcId,
+          affinity: rel.affinity,
+          emotion: rel.emotion,
+          lastUpdated: rel.lastUpdated,
+        };
+      }
+      store.setRelationships(rels);
+    }
 
     // 3. Scene entities — teleport AFTER store updates so the position
     //    overlay reads the new value on the next selector tick.

@@ -1,10 +1,12 @@
 /**
- * NPC routes — Phase 2.2 (FR-002, FR-003).
+ * NPC routes — Phase 2.2 (FR-002, FR-003) + Phase 3.3 (FR-007).
  *
- *   GET    /                  → list known NPC ids
- *   GET    /:id/context       → recent dialog history (debug aid)
- *   DELETE /:id/context       → reset history (debug aid)
- *   POST   /:id/talk          → send a message, get an AI reply
+ *   GET    /                       → list known NPC ids
+ *   GET    /:id/context            → recent dialog history (debug aid)
+ *   DELETE /:id/context            → reset history (debug aid)
+ *   POST   /:id/talk               → send a message, get an AI reply
+ *   GET    /:id/relationship       → current RelationshipData (Phase 3.3)
+ *   DELETE /:id/relationship       → reset relationship to default (Phase 3.3)
  *
  * Errors:
  *   - LM Studio offline / errors → 503 { error: 'llm_unavailable', ... }
@@ -61,6 +63,34 @@ export const createNPCRoutes = ({ npcService }: NPCRouteDeps): Hono => {
     }
     await npcService.clearContext(id);
     return c.json({ npcId: id, cleared: true });
+  });
+
+  // --- Phase 3.3 relationship endpoints (FR-007) -----------------------------
+
+  app.get('/:id/relationship', async (c) => {
+    const id = c.req.param('id');
+    try {
+      const rel = await npcService.getRelationship(id);
+      return c.json(rel);
+    } catch (err) {
+      if (err instanceof NPCNotFoundError) {
+        return c.json({ error: 'npc_not_found', npcId: id }, 404);
+      }
+      throw err;
+    }
+  });
+
+  app.delete('/:id/relationship', async (c) => {
+    const id = c.req.param('id');
+    try {
+      const rel = await npcService.clearRelationship(id);
+      return c.json({ npcId: id, cleared: true, relationship: rel });
+    } catch (err) {
+      if (err instanceof NPCNotFoundError) {
+        return c.json({ error: 'npc_not_found', npcId: id }, 404);
+      }
+      throw err;
+    }
   });
 
   app.post(

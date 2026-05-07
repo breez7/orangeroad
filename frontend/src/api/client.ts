@@ -30,10 +30,37 @@ export interface HistoryEntry {
   ts?: number;
 }
 
+/**
+ * Phase 3.3 emotion taxonomy — must match
+ * `backend/src/models/Relationship.ts` and `gameStore.Emotion`.
+ */
+export type APIEmotion =
+  | 'neutral'
+  | 'happy'
+  | 'sad'
+  | 'angry'
+  | 'shy'
+  | 'flirty'
+  | 'annoyed';
+
+/** Wire shape for backend RelationshipData. */
+export interface RelationshipPayload {
+  npcId: string;
+  affinity: number;
+  emotion: APIEmotion;
+  lastUpdated: number;
+}
+
 export interface TalkResult {
   npcId: string;
   response: string;
   history: HistoryEntry[];
+  /** Phase 3.3 — present when the backend ran the relationship update. */
+  emotionUpdate?: APIEmotion;
+  /** Phase 3.3 — signed delta applied this turn (clamped). */
+  affinityChange?: number;
+  /** Phase 3.3 — full relationship state after the turn, for client sync. */
+  relationship?: RelationshipPayload;
 }
 
 export interface NPCContextResult {
@@ -182,6 +209,32 @@ export async function clearNPCContext(
   );
 }
 
+// ---- Phase 3.3 Relationship (FR-007) -------------------------------------
+
+/** Fetch the current relationship state for an NPC. Backend creates a
+ *  default `{ affinity: 50, emotion: 'neutral' }` when no file exists. */
+export async function getRelationship(
+  npcId: string,
+  opts: { signal?: AbortSignal } = {},
+): Promise<RelationshipPayload> {
+  return fetchJSON<RelationshipPayload>(
+    `/npc/${encodeURIComponent(npcId)}/relationship`,
+    { method: 'GET', signal: opts.signal },
+  );
+}
+
+/** Reset an NPC's relationship to the default. Debug-only; the UI does NOT
+ *  expose this directly to players. */
+export async function clearRelationship(
+  npcId: string,
+  opts: { signal?: AbortSignal } = {},
+): Promise<{ npcId: string; cleared: true; relationship: RelationshipPayload }> {
+  return fetchJSON<{ npcId: string; cleared: true; relationship: RelationshipPayload }>(
+    `/npc/${encodeURIComponent(npcId)}/relationship`,
+    { method: 'DELETE', signal: opts.signal },
+  );
+}
+
 // ---- Phase 3.2 Save/Load (FR-008) -----------------------------------------
 
 /**
@@ -214,6 +267,9 @@ export interface SaveNPCEntry {
  * Versioned save payload — must match `gameSaveV1Schema` on the backend.
  * The frontend `SaveSystem` builds this from the Zustand store and submits
  * it to POST /save/:slotId.
+ *
+ * Phase 3.3: `relationships` is an optional field. New saves include it;
+ * loading an older v1 save without it is supported (defaults applied).
  */
 export interface GameSavePayload {
   version: 1;
@@ -224,6 +280,7 @@ export interface GameSavePayload {
   playerPosition: { x: number; y: number };
   npcs: Record<string, SaveNPCEntry>;
   currentLocationId: string | null;
+  relationships?: Record<string, RelationshipPayload>;
 }
 
 export interface SaveListResult {

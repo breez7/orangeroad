@@ -1,0 +1,114 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom styles for Orange Road game */
+@layer base {
+  body {
+    @apply overflow-hidden;
+  }
+
+  #root {
+    @apply h-screen w-screen;
+  }
+}
+
+@layer components {
+  /* Game container */
+  .game-container {
+    @apply relative h-full w-full bg-gray-900;
+  }
+
+  /* PixiJS canvas wrapper */
+  .game-canvas {
+    @apply absolute inset-0;
+  }
+
+  /* UI overlay layer */
+  .ui-overlay {
+    @apply absolute inset-0 pointer-events-none;
+  }
+
+  .ui-interactive {
+    @apply pointer-events-auto;
+  }
+
+  /* Dialog box */
+  .dialog-box {
+    @apply absolute bottom-4 left-4 right-4 bg-gray-800/95 border-2 border-orange-primary rounded-lg p-4 shadow-2xl;
+    @apply pointer-events-auto backdrop-blur-sm;
+  }
+
+  /* Status panel */
+  .status-panel {
+    @apply absolute top-4 left-4 bg-gray-800/90 border border-orange-secondary rounded-lg p-3 shadow-lg;
+    @apply pointer-events-auto backdrop-blur-sm;
+  }
+
+  /* Time display */
+  .time-display {
+    @apply absolute top-4 right-4 bg-gray-800/90 border border-orange-secondary rounded-lg px-4 py-2 shadow-lg;
+    @apply pointer-events-auto backdrop-blur-sm;
+  }
+
+  /* Button styles */
+  .btn-game {
+    @apply px-4 py-2 bg-orange-primary hover:bg-orange-dark text-white font-semibold rounded-lg transition-colors duration-200;
+    @apply border-b-4 border-orange-dark active:border-b-0 active:translate-y-1;
+  }
+
+  .btn-game:disabled {
+    @apply bg-gray-600 border-gray-700 cursor-not-allowed opacity-50;
+  }
+
+  /* Character sprite */
+  .character-sprite {
+    @apply absolute transition-transform duration-200;
+  }
+}
+
+@layer utilities {
+  /* Game-specific utilities */
+  .text-shadow {
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+  }
+
+  .text-shadow-lg {
+    text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.9);
+  }
+
+  /* Loading spinner */
+  .spinner {
+    @apply animate-spin rounded-full border-4 border-orange-primary border-t-transparent;
+  }
+}
+
+/* Animation for dialog appearance */
+@keyframes slide-up {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.animate-slide-up {
+  animation: slide-up 0.3s ease-out;
+}
+
+/* Animation for character interaction */
+@keyframes bounce-subtle {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+.animate-bounce-subtle {
+  animation: bounce-subtle 0.5s ease-in-out;
+}

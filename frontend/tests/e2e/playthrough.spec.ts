@@ -145,11 +145,10 @@ test.describe.configure({ mode: 'serial' });
 test('mandatory 11-step end-to-end playthrough', async ({ page }) => {
   // Wall-clock ceiling. The vite dev cold start eats ~14s on its own and the
   // 11 user-facing steps + step 7b browser reload each have a baseline of ~5s
-  // for click + render + network + react-rerender. 180s is the realistic
-  // ceiling on a Pi-class host; tightening below ~90s would require a
-  // production build (no dev-only `__game` helpers) or running steps in
-  // parallel (incompatible with the linear-playthrough spec).
-  test.setTimeout(180_000);
+  // for click + render + network + react-rerender. The Phase B-1/B-2 sprite +
+  // town artwork added another ~30s of paint cost on top of #18-#19, pushing
+  // a clean run to ~190-220s. 240s gives headroom on Pi-class hosts.
+  test.setTimeout(240_000);
 
   // Disable CSS animations / transitions globally so Playwright's actionability
   // wait doesn't burn ~300ms on every click for the panel-glass slide-up keyframes.

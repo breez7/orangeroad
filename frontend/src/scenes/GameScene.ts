@@ -48,11 +48,23 @@ export class GameScene {
     this.root = new Container();
     this.root.label = 'game-scene';
 
+    // Base ground — a warm grass-green replacing the old dark teal so the
+    // open areas read as lawn rather than abstract void.
     const ground = new Graphics();
     ground.rect(0, 0, TOWN_BOUNDS.width, TOWN_BOUNDS.height);
-    ground.fill({ color: 0x264653 });
+    ground.fill({ color: 0x4f7a3a });
     this.root.addChild(ground);
 
+    // Grass texture — deterministic dot scatter so reloading doesn't reshuffle
+    // the pattern. Pre-baked into a single Graphics object so we pay one
+    // draw call regardless of dot count. Avoids the location rects so it
+    // doesn't bleed into the buildings' own ground.
+    const grass = this.buildGrassTexture();
+    this.root.addChild(grass);
+
+    // Subtle reference grid — kept much fainter than before so the new
+    // grass+buildings dominate the silhouette but the grid is still useful
+    // for spatial debugging.
     const grid = new Graphics();
     const step = 80;
     for (let x = 0; x <= TOWN_BOUNDS.width; x += step) {
@@ -61,8 +73,17 @@ export class GameScene {
     for (let y = 0; y <= TOWN_BOUNDS.height; y += step) {
       grid.moveTo(0, y).lineTo(TOWN_BOUNDS.width, y);
     }
-    grid.stroke({ color: 0xffffff, width: 1, alpha: 0.06 });
+    grid.stroke({ color: 0xffffff, width: 1, alpha: 0.04 });
     this.root.addChild(grid);
+
+    // Town decor layer — sits BELOW the location rects so paths don't paint
+    // over the buildings' own front-door geometry. This is the canonical
+    // place to draw cross-location decoration like footpaths and outdoor
+    // landmarks.
+    const townDecor = new Graphics();
+    townDecor.label = 'town-decor';
+    this.drawConnectingPaths(townDecor);
+    this.root.addChild(townDecor);
 
     for (const def of LOCATIONS) {
       const loc = new Location(def);
@@ -237,6 +258,105 @@ export class GameScene {
     this.root.scale.set(scale);
     this.root.x = (viewWidth - TOWN_BOUNDS.width * scale) / 2;
     this.root.y = (viewHeight - TOWN_BOUNDS.height * scale) / 2;
+  }
+
+  /**
+   * Phase B-2 — bake the grass texture into a single Graphics object. We
+   * pre-compute a deterministic spray of small green-toned dots/dashes
+   * across the whole town, skipping the rectangles owned by `LOCATIONS` so
+   * the dots don't paint over building decor. Pre-baking means ~200 leaves
+   * cost one draw call rather than spawning hundreds of objects.
+   */
+  private buildGrassTexture(): Graphics {
+    const g = new Graphics();
+    g.label = 'grass-texture';
+    // Cheap deterministic hash — the sample task suggested an xor-mix; we use
+    // a similar large-prime hash so the scatter is stable across reloads but
+    // not aligned to the underlying grid.
+    const hash = (a: number, b: number) =>
+      (((a * 73856093) ^ (b * 19349663)) >>> 0) % 100000;
+
+    const stepX = 28;
+    const stepY = 28;
+    // Tones of green that read as varied grass without being noisy.
+    const tones = [0x6aa84f, 0x83b66c, 0x4f8f3a, 0x9bbe7e];
+    for (let y = 6; y < TOWN_BOUNDS.height - 6; y += stepY) {
+      for (let x = 6; x < TOWN_BOUNDS.width - 6; x += stepX) {
+        // Skip dots that would land inside any location rect — the location
+        // entity owns those pixels and draws its own ground patch.
+        if (this.isPointInsideAnyLocation(x, y)) continue;
+        const h1 = hash(x, y);
+        // Jitter the position so the texture doesn't show its grid.
+        const jx = x + ((h1 % 17) - 8);
+        const jy = y + (((h1 / 17) | 0) % 17) - 8;
+        if (this.isPointInsideAnyLocation(jx, jy)) continue;
+        const tone = tones[h1 % tones.length];
+        // 1-in-3 dots become a small dash (line) instead — adds variety.
+        if (h1 % 3 === 0) {
+          g.moveTo(jx, jy).lineTo(jx + 3, jy - 1);
+          g.stroke({ color: tone, width: 1.4, alpha: 0.55 });
+        } else {
+          g.circle(jx, jy, 1.5);
+          g.fill({ color: tone, alpha: 0.65 });
+        }
+      }
+    }
+    return g;
+  }
+
+  /**
+   * Helper for the grass + path layers: is `(x, y)` inside any LOCATIONS rect?
+   * Used to keep grass dots from intruding on a building's ground patch and
+   * to clip path segments at the front-door target.
+   */
+  private isPointInsideAnyLocation(x: number, y: number): boolean {
+    for (const l of LOCATIONS) {
+      if (x >= l.x && x <= l.x + l.width && y >= l.y && y <= l.y + l.height) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Phase B-2 — short brown footpaths connecting the front-door area of each
+   * building to the central town square (TOWN_BOUNDS center). Drawn into the
+   * provided Graphics so all paths share a single draw call. Stroked twice:
+   * once with a soft-cream highlight then a darker tan core, which gives the
+   * paths a baked-look without textures.
+   */
+  private drawConnectingPaths(g: Graphics): void {
+    const cx = TOWN_BOUNDS.width / 2;
+    const cy = TOWN_BOUNDS.height / 2;
+
+    // Each path runs from a "doorstep" anchor outside the location rect to
+    // the town center. Anchoring outside the rect (rather than at the door
+    // itself) keeps the path from painting over the front-door art.
+    const anchors: Array<{ x: number; y: number }> = LOCATIONS.map((l) => ({
+      x: l.x + l.width / 2,
+      // Anchor 6px outside the rect on whichever edge faces the town center.
+      y: l.y + l.height / 2 < cy ? l.y + l.height + 6 : l.y - 6,
+    }));
+
+    // Outer halo — soft sandy border so the path edges don't look like a
+    // hard cut against the grass.
+    for (const a of anchors) {
+      g.moveTo(a.x, a.y);
+      g.quadraticCurveTo((a.x + cx) / 2, (a.y + cy) / 2 + 4, cx, cy);
+    }
+    g.stroke({ color: 0xe6cfa3, width: 16, alpha: 0.55 });
+
+    // Core path stroke — warmer tan.
+    for (const a of anchors) {
+      g.moveTo(a.x, a.y);
+      g.quadraticCurveTo((a.x + cx) / 2, (a.y + cy) / 2 + 4, cx, cy);
+    }
+    g.stroke({ color: 0xc9a26a, width: 10, alpha: 0.95 });
+
+    // Small plaza disc at the town center where all paths meet.
+    g.circle(cx, cy, 22);
+    g.fill({ color: 0xd6b88a, alpha: 0.95 });
+    g.stroke({ color: 0x9c7a4a, width: 1.5, alpha: 0.85 });
   }
 
   destroy(): void {

@@ -18,7 +18,14 @@ build/
 
 # Save data (local only)
 saves/*.json
+saves/slots/
+saves/relationships/
+saves/npc-context/
 !saves/.gitkeep
+
+# Playwright runtime artefacts
+frontend/playwright-report/
+frontend/test-results/
 
 # OS
 .DS_Store

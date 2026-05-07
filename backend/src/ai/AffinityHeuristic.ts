@@ -79,7 +79,23 @@ export interface DeriveArgs {
   npcResponse: string;
   /** Current emotion to fall back to when no keyword matched. */
   currentEmotion: Emotion;
+  /**
+   * Phase 4.3 — per-character keyword overrides. When a token from `likes`
+   * appears in the combined turn, it adds an extra positive bump on top of
+   * the global `KEYWORD_GROUPS` matches. `dislikes` adds a negative bump.
+   * The extras are still capped by {@link MAX_DELTA} so per-character data
+   * cannot break Phase 3.3 invariants.
+   *
+   * Substring matching is intentional, mirroring the global table — Korean
+   * substrings like "농구" inside "농구공" still count.
+   */
+  likes?: string[];
+  dislikes?: string[];
 }
+
+/** Per-hit weight for character-specific likes (positive) / dislikes (negative). */
+export const PER_CHARACTER_LIKE_WEIGHT = 2;
+export const PER_CHARACTER_DISLIKE_WEIGHT = -2;
 
 export interface DeriveResult {
   affinityChange: number;
@@ -125,6 +141,8 @@ export function deriveAffinityChange({
   userMessage,
   npcResponse,
   currentEmotion,
+  likes,
+  dislikes,
 }: DeriveArgs): DeriveResult {
   // Combine both sides of the turn — the NPC's *response* is also a clue.
   const combined = `${userMessage} ${npcResponse}`;
@@ -146,6 +164,30 @@ export function deriveAffinityChange({
         bestScore = groupHits;
         bestTag = group.tag;
       }
+    }
+  }
+
+  // Phase 4.3 — per-character likes / dislikes layered on top of the global
+  // groups. They contribute affinity but DO NOT override the dominant emotion
+  // tiebreak (a "likes" hit on a generic positive turn keeps emotion=happy;
+  // a "dislikes" hit on a generic positive turn shouldn't flip emotion to
+  // angry on its own — emotion still follows the global table).
+  if (likes && likes.length > 0) {
+    let likeHits = 0;
+    for (const kw of likes) {
+      likeHits += countHits(combined, kw);
+    }
+    if (likeHits > 0) {
+      totalDelta += likeHits * PER_CHARACTER_LIKE_WEIGHT;
+    }
+  }
+  if (dislikes && dislikes.length > 0) {
+    let dislikeHits = 0;
+    for (const kw of dislikes) {
+      dislikeHits += countHits(combined, kw);
+    }
+    if (dislikeHits > 0) {
+      totalDelta += dislikeHits * PER_CHARACTER_DISLIKE_WEIGHT;
     }
   }
 

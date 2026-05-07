@@ -28,6 +28,7 @@ import { buildPrompt, type CharacterProfile } from '@/ai/PromptBuilder';
 import { deriveAffinityChange } from '@/ai/AffinityHeuristic';
 import {
   clampAffinity,
+  EMOTIONS,
   type Emotion,
   type RelationshipData,
 } from '@/models/Relationship';
@@ -62,6 +63,14 @@ export interface NPCServiceOptions {
   /** How many history entries to return in the response payload. */
   recentHistorySize: number;
 }
+
+/**
+ * Phase 4.3 — character ids that are NOT NPCs and must be excluded from
+ * `listIds()`. Currently only the player (kyousuke). The profile JSON still
+ * exists so PromptBuilder/etc. can read player-side data, but talk endpoints
+ * and the world-NPC roster never see this id.
+ */
+export const PLAYER_CHARACTER_IDS: ReadonlySet<string> = new Set(['kyousuke']);
 
 export class NPCService {
   private readonly charactersDir: string;
@@ -113,6 +122,8 @@ export class NPCService {
       const ids = entries
         .filter((f) => f.endsWith('.json'))
         .map((f) => f.replace(/\.json$/, ''))
+        // Phase 4.3 — exclude the player from the public NPC roster.
+        .filter((id) => !PLAYER_CHARACTER_IDS.has(id))
         .sort();
       this.idsCache = ids;
       return ids;
@@ -122,11 +133,51 @@ export class NPCService {
     }
   }
 
+  /**
+   * Phase 4.3 — provider for {@link RelationshipManager.setDefaultProvider}.
+   * Reads the character JSON's optional `initialRelationship` and returns it
+   * as a RelationshipData seed. Returns null when the profile is unknown
+   * (caller falls back to the global 50/neutral default) so a typo'd id
+   * doesn't crash the server.
+   *
+   * Bound as an arrow-style property so the manager can hold it without `.bind`.
+   */
+  resolveInitialRelationship = async (
+    npcId: string,
+  ): Promise<RelationshipData | null> => {
+    let profile: CharacterProfile;
+    try {
+      profile = await this.loadProfile(npcId);
+    } catch {
+      return null;
+    }
+    const init = profile.initialRelationship;
+    if (!init) return null;
+    // Validate emotion against the canonical enum so a typo in JSON cannot
+    // smuggle a bogus value into RelationshipData (zod also catches this on
+    // the next persist; doing it here keeps the in-memory cache clean too).
+    const emotion: Emotion = (EMOTIONS as readonly string[]).includes(init.emotion)
+      ? (init.emotion as Emotion)
+      : 'neutral';
+    return {
+      npcId,
+      affinity: clampAffinity(init.affinity),
+      emotion,
+      lastUpdated: Date.now(),
+    };
+  };
+
   async getRecentHistory(npcId: string): Promise<NPCHistoryEntry[]> {
+    if (PLAYER_CHARACTER_IDS.has(npcId)) {
+      throw new NPCNotFoundError(npcId);
+    }
     return this.context.recent(npcId, this.recentHistorySize);
   }
 
   async clearContext(npcId: string): Promise<void> {
+    if (PLAYER_CHARACTER_IDS.has(npcId)) {
+      throw new NPCNotFoundError(npcId);
+    }
     await this.context.clear(npcId);
   }
 
@@ -134,15 +185,23 @@ export class NPCService {
 
   /**
    * Get current relationship state, creating a default if missing. Throws
-   * NPCNotFoundError if the npcId doesn't correspond to a known profile.
+   * NPCNotFoundError if the npcId doesn't correspond to a known NPC profile
+   * (the player kyousuke is rejected — the player has no relationship with
+   * themselves).
    */
   async getRelationship(npcId: string): Promise<RelationshipData> {
+    if (PLAYER_CHARACTER_IDS.has(npcId)) {
+      throw new NPCNotFoundError(npcId);
+    }
     await this.loadProfile(npcId);
     return this.relationships.load(npcId);
   }
 
   /** Reset relationship to default. Throws NPCNotFoundError on unknown id. */
   async clearRelationship(npcId: string): Promise<RelationshipData> {
+    if (PLAYER_CHARACTER_IDS.has(npcId)) {
+      throw new NPCNotFoundError(npcId);
+    }
     await this.loadProfile(npcId);
     return this.relationships.clear(npcId);
   }
@@ -155,6 +214,11 @@ export class NPCService {
   // --- talk ---------------------------------------------------------------
 
   async talk({ npcId, message }: TalkArgs): Promise<TalkResult> {
+    // Phase 4.3 — the player has a profile JSON for prompt context, but the
+    // player cannot talk to themselves over the dialog API.
+    if (PLAYER_CHARACTER_IDS.has(npcId)) {
+      throw new NPCNotFoundError(npcId);
+    }
     const profile = await this.loadProfile(npcId);
     const ctx = await this.context.load(npcId);
     const rel = await this.relationships.load(npcId);
@@ -177,10 +241,14 @@ export class NPCService {
     await this.context.appendTurn(npcId, message, result.content);
 
     // Derive deterministic affinity delta + new emotion from the turn.
+    // Phase 4.3 — pass per-character likes/dislikes so each NPC reacts more
+    // strongly to their own keywords without changing the global table.
     const { affinityChange, emotion } = deriveAffinityChange({
       userMessage: message,
       npcResponse: result.content,
       currentEmotion: rel.emotion,
+      likes: profile.likes,
+      dislikes: profile.dislikes,
     });
 
     const newAffinity = clampAffinity(rel.affinity + affinityChange);

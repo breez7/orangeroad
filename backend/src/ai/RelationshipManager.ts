@@ -33,6 +33,18 @@ export interface RelationshipManagerOptions {
   saveDir: string;
 }
 
+/**
+ * Phase 4.3 — async provider that maps an NPC id to its canonical starting
+ * RelationshipData. When set, this is consulted on first load (before the
+ * generic 50/neutral default) so each NPC's initial affinity reflects the
+ * canon. Returning `null`/`undefined` falls back to {@link defaultRelationship}.
+ *
+ * Async because the wired implementation reads the character JSON profile.
+ */
+export type DefaultRelationshipProvider = (
+  npcId: string,
+) => Promise<RelationshipData | null | undefined> | RelationshipData | null | undefined;
+
 /** Patch shape for {@link RelationshipManager.update}. All fields optional. */
 export interface RelationshipPatch {
   /** Replace affinity directly (clamped by caller — manager does NOT clamp). */
@@ -48,6 +60,12 @@ export class RelationshipManager {
   private readonly cache = new Map<string, RelationshipData>();
   /** Per-id mutex: chains writes for the same NPC. */
   private readonly locks = new Map<string, Promise<unknown>>();
+  /**
+   * Phase 4.3 — optional canonical-default provider. Set via
+   * {@link setDefaultProvider}. Wired by `server.ts` to read each NPC's
+   * `initialRelationship` from the character JSON profile.
+   */
+  private defaultProvider: DefaultRelationshipProvider | null = null;
 
   constructor(opts?: Partial<RelationshipManagerOptions>) {
     // Default to `<repo>/saves/relationships/`. Resolve relative to this file
@@ -55,6 +73,42 @@ export class RelationshipManager {
     // backend/src/ai/RelationshipManager.ts → <repo>/saves/relationships
     const def = resolve(import.meta.dir, '..', '..', '..', 'saves', 'relationships');
     this.saveDir = opts?.saveDir ?? def;
+  }
+
+  /**
+   * Phase 4.3 — install/replace the canonical-default provider. Pass `null`
+   * to clear (tests / explicit reset). Does NOT invalidate the in-memory
+   * cache — already-loaded NPCs keep their loaded state.
+   */
+  setDefaultProvider(fn: DefaultRelationshipProvider | null): void {
+    this.defaultProvider = fn;
+  }
+
+  /**
+   * Resolve the canonical default for a fresh NPC. Falls back to the global
+   * {@link defaultRelationship} when no provider is set or the provider
+   * returns nullish. Errors from the provider are logged and treated as
+   * fallback so a malformed profile cannot break dialog.
+   */
+  private async resolveDefault(id: string): Promise<RelationshipData> {
+    if (!this.defaultProvider) return defaultRelationship(id);
+    try {
+      const provided = await this.defaultProvider(id);
+      if (!provided) return defaultRelationship(id);
+      // Re-pin npcId + lastUpdated so providers don't have to set them.
+      return {
+        npcId: id,
+        affinity: provided.affinity,
+        emotion: provided.emotion,
+        lastUpdated: provided.lastUpdated || Date.now(),
+      };
+    } catch (err) {
+      console.warn(
+        `[RelationshipManager] default provider threw for ${id}, using global default:`,
+        err,
+      );
+      return defaultRelationship(id);
+    }
   }
 
   private async withLock<T>(id: string, fn: () => Promise<T>): Promise<T> {
@@ -107,7 +161,7 @@ export class RelationshipManager {
       }
     }
 
-    const fresh = defaultRelationship(id);
+    const fresh = await this.resolveDefault(id);
     this.cache.set(id, fresh);
     return fresh;
   }
@@ -145,7 +199,10 @@ export class RelationshipManager {
         const { unlink } = await import('node:fs/promises');
         await unlink(path).catch(() => undefined);
       }
-      const fresh = defaultRelationship(id);
+      // Phase 4.3 — clear() resets to the canonical per-character default
+      // (or the global default if none is registered). Otherwise a manual
+      // reset would silently downgrade e.g. madoka 60 → 50.
+      const fresh = await this.resolveDefault(id);
       this.cache.set(id, fresh);
       return fresh;
     });

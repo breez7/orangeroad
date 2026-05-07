@@ -39,30 +39,32 @@ export const createNPCRoutes = ({ npcService }: NPCRouteDeps): Hono => {
   app.get('/:id/context', async (c) => {
     const id = c.req.param('id');
     try {
-      // Touch profile so unknown ids get a clean 404.
+      // Touch profile so unknown ids get a clean 404. Phase 4.3 —
+      // getRecentHistory also rejects player ids (kyousuke) with the same
+      // error, so the catch below covers both cases.
       await npcService.loadProfile(id);
+      const history = await npcService.getRecentHistory(id);
+      return c.json({ npcId: id, history });
     } catch (err) {
       if (err instanceof NPCNotFoundError) {
         return c.json({ error: 'npc_not_found', npcId: id }, 404);
       }
       throw err;
     }
-    const history = await npcService.getRecentHistory(id);
-    return c.json({ npcId: id, history });
   });
 
   app.delete('/:id/context', async (c) => {
     const id = c.req.param('id');
     try {
       await npcService.loadProfile(id);
+      await npcService.clearContext(id);
+      return c.json({ npcId: id, cleared: true });
     } catch (err) {
       if (err instanceof NPCNotFoundError) {
         return c.json({ error: 'npc_not_found', npcId: id }, 404);
       }
       throw err;
     }
-    await npcService.clearContext(id);
-    return c.json({ npcId: id, cleared: true });
   });
 
   // --- Phase 3.3 relationship endpoints (FR-007) -----------------------------

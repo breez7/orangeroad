@@ -37,10 +37,14 @@ app.use(
 
 // --- Phase 2.2 wiring: build singletons once and inject into route factory.
 // Phase 3.3 adds RelationshipManager so NPCService can read/update affinity.
+// Phase 4.3 wires NPCService.resolveInitialRelationship as the manager's
+// canonical-default provider so first-load returns per-character seeds
+// (e.g. madoka 60/neutral) instead of the global 50/neutral fallback.
 const llmClient = new LLMClient();
 const contextManager = new ContextManager();
 const relationshipManager = new RelationshipManager();
 const npcService = new NPCService(llmClient, contextManager, relationshipManager);
+relationshipManager.setDefaultProvider(npcService.resolveInitialRelationship);
 
 // --- Phase 3.2 wiring: SaveStorage + SaveService for FR-008 save/load.
 const saveStorage = new SaveStorage();

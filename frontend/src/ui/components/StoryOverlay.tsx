@@ -109,6 +109,9 @@ export function StoryOverlay({ npcNames, onConfirm }: StoryOverlayProps) {
       role="dialog"
       aria-modal="true"
       aria-label="스토리 이벤트"
+      data-testid="story-overlay"
+      data-event-id={activeEventId}
+      data-step-index={stepIndex}
     >
       {/* Re-key on activeEventId + stepIndex so each new step remounts the
           card, replaying the slide+fade animation — a soft cue between
@@ -117,6 +120,7 @@ export function StoryOverlay({ npcNames, onConfirm }: StoryOverlayProps) {
         key={`${activeEventId}-${stepIndex}`}
         className="mx-auto max-w-2xl panel-glass p-4 pointer-events-auto cursor-pointer animate-slide-up"
         onClick={onConfirm}
+        data-testid="story-card"
       >
         {loadError && (
           <p className="text-red-300 text-sm mb-2" role="alert">
@@ -141,6 +145,7 @@ export function StoryOverlay({ npcNames, onConfirm }: StoryOverlayProps) {
                 ? 'text-gray-200 italic whitespace-pre-line text-sm leading-relaxed'
                 : 'text-white whitespace-pre-line text-base leading-relaxed'
             }
+            data-testid="story-text"
           >
             {bodyText}
           </p>
@@ -154,6 +159,7 @@ export function StoryOverlay({ npcNames, onConfirm }: StoryOverlayProps) {
               onConfirm();
             }}
             className="btn-game text-sm"
+            data-testid="story-continue"
           >
             {isDialog ? '▶ 다음' : '▼ 계속하기'}
           </button>

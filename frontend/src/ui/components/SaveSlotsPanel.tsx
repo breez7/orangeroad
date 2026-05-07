@@ -257,6 +257,7 @@ export function SaveSlotsPanel({
       role="dialog"
       aria-modal="true"
       aria-label="세이브 슬롯"
+      data-testid="save-panel"
       onClick={(e) => {
         // Click on the dim backdrop closes the panel; clicks inside the
         // card bubble up to here but stop at the inner stopPropagation.
@@ -274,6 +275,7 @@ export function SaveSlotsPanel({
             onClick={onClose}
             className="btn-icon"
             aria-label="닫기"
+            data-testid="save-panel-close"
           >
             <span aria-hidden>×</span>
           </button>
@@ -304,6 +306,7 @@ export function SaveSlotsPanel({
               <li
                 key={row.slotId}
                 className="bg-gray-900/60 border border-gray-700 rounded p-3 flex flex-col gap-2 animate-fade-in"
+                data-testid={`save-slot-${row.slotId}`}
               >
                 <div className="flex items-center justify-between">
                   <span className="font-semibold text-gray-100">{row.slotId}</span>
@@ -325,6 +328,7 @@ export function SaveSlotsPanel({
                     disabled={isBusy || !saveSystem}
                     className="btn-game text-sm px-3 py-1 inline-flex items-center gap-1.5"
                     aria-label={`${row.slotId}에 저장`}
+                    data-testid={`save-action-${row.slotId}`}
                   >
                     {isBusy && busyAction === 'save' && (
                       <span className="inline-block w-3 h-3 spinner" aria-hidden />
@@ -337,6 +341,7 @@ export function SaveSlotsPanel({
                     disabled={isBusy || !saveSystem || !summary}
                     className="btn-game text-sm px-3 py-1 inline-flex items-center gap-1.5"
                     aria-label={`${row.slotId} 불러오기`}
+                    data-testid={`load-action-${row.slotId}`}
                   >
                     {isBusy && busyAction === 'load' && (
                       <span className="inline-block w-3 h-3 spinner" aria-hidden />
@@ -349,6 +354,7 @@ export function SaveSlotsPanel({
                     disabled={isBusy || !saveSystem || !summary}
                     className="btn-game-ghost text-sm"
                     aria-label={`${row.slotId} 삭제`}
+                    data-testid={`delete-action-${row.slotId}`}
                   >
                     {isBusy && busyAction === 'delete' ? '삭제 중...' : '삭제'}
                   </button>

@@ -69,6 +69,7 @@ export function AudioPanel() {
         className="absolute bottom-4 right-20 btn-icon panel-glass ui-interactive"
         aria-label="사운드 설정 열기"
         title="사운드 설정"
+        data-testid="audio-open"
       >
         <span aria-hidden className="text-orange-primary">
           {icon}
@@ -81,6 +82,7 @@ export function AudioPanel() {
           role="dialog"
           aria-modal="true"
           aria-label="사운드 설정"
+          data-testid="audio-panel"
           onClick={(e) => {
             if (e.target === e.currentTarget) setOpen(false);
           }}
@@ -96,6 +98,7 @@ export function AudioPanel() {
                 onClick={() => setOpen(false)}
                 className="btn-icon"
                 aria-label="사운드 설정 닫기"
+                data-testid="audio-close-x"
               >
                 ×
               </button>
@@ -120,6 +123,7 @@ export function AudioPanel() {
                   disabled={audio.muted}
                   className="w-full accent-orange-primary disabled:opacity-50"
                   aria-label="음악 볼륨"
+                  data-testid="audio-music-volume"
                 />
               </label>
 
@@ -141,6 +145,7 @@ export function AudioPanel() {
                   disabled={audio.muted}
                   className="w-full accent-orange-primary disabled:opacity-50"
                   aria-label="효과음 볼륨"
+                  data-testid="audio-sfx-volume"
                 />
               </label>
 
@@ -154,6 +159,7 @@ export function AudioPanel() {
                     onChange={(e) => setBgmEnabled(e.currentTarget.checked)}
                     className="w-5 h-5 accent-orange-primary"
                     aria-label="배경음악 토글"
+                    data-testid="audio-bgm-toggle"
                   />
                 </label>
                 <label className="flex items-center justify-between gap-3 cursor-pointer">
@@ -164,6 +170,7 @@ export function AudioPanel() {
                     onChange={(e) => setMuted(e.currentTarget.checked)}
                     className="w-5 h-5 accent-orange-primary"
                     aria-label="음소거 토글"
+                    data-testid="audio-mute-toggle"
                   />
                 </label>
               </div>
@@ -179,6 +186,7 @@ export function AudioPanel() {
                 type="button"
                 onClick={() => setOpen(false)}
                 className="btn-game text-sm"
+                data-testid="audio-close"
               >
                 닫기
               </button>

@@ -91,6 +91,8 @@ function App() {
           playEvent: (eventId: string) => Promise<void>;
           setTimeSpeed: (multiplier: number) => void;
           displaceNpc: (npcId: string, x: number, y: number) => void;
+          advanceTime: (minutes: number) => void;
+          loadSlot: (slotId: string) => Promise<void>;
         };
       }).__game = {
         teleportPlayer: (x: number, y: number) => {
@@ -120,6 +122,28 @@ function App() {
           const npcs = { ...s.npcs };
           npcs[npcId] = { ...npcs[npcId], position: { x, y }, locationId: '__displaced__' };
           s.setNPCs(npcs);
+        },
+        advanceTime: (minutes: number) => {
+          const scene = gameRef.current?.currentScene;
+          if (!scene) return;
+          const t = useGameStore.getState().time;
+          let day = t.day;
+          let hour = t.hour;
+          let minute = t.minute + Math.floor(minutes);
+          while (minute >= 60) {
+            minute -= 60;
+            hour += 1;
+            if (hour >= 24) {
+              hour = 0;
+              day += 1;
+            }
+          }
+          scene.time.setTime({ day, hour, minute });
+        },
+        loadSlot: async (slotId: string) => {
+          const sys = gameRef.current?.saveSystem;
+          if (!sys) return;
+          await sys.load(slotId);
         },
       };
     }

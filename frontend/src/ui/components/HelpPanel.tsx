@@ -44,6 +44,7 @@ export function HelpPanel() {
         className="absolute bottom-4 right-4 btn-icon panel-glass ui-interactive"
         aria-label="도움말 열기"
         title="도움말"
+        data-testid="help-open"
       >
         <span aria-hidden className="text-orange-primary font-bold">?</span>
       </button>
@@ -54,6 +55,7 @@ export function HelpPanel() {
           role="dialog"
           aria-modal="true"
           aria-label="도움말"
+          data-testid="help-panel"
           onClick={(e) => {
             if (e.target === e.currentTarget) setOpen(false);
           }}
@@ -61,6 +63,7 @@ export function HelpPanel() {
           <div
             className="panel-glass mx-4 p-5 w-full max-w-md"
             onClick={(e) => e.stopPropagation()}
+            data-testid="help-card"
           >
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-lg font-bold text-orange-primary">도움말</h2>
@@ -69,6 +72,7 @@ export function HelpPanel() {
                 onClick={() => setOpen(false)}
                 className="btn-icon"
                 aria-label="도움말 닫기"
+                data-testid="help-close-x"
               >
                 ×
               </button>
@@ -134,6 +138,8 @@ export function HelpPanel() {
                 type="button"
                 onClick={() => setOpen(false)}
                 className="btn-game text-sm"
+                aria-label="도움말 닫기"
+                data-testid="help-close-button"
               >
                 닫기
               </button>

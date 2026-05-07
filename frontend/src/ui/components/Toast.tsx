@@ -122,6 +122,7 @@ export function ToastContainer() {
       role="region"
       aria-label="알림"
       aria-live="polite"
+      data-testid="toast-container"
     >
       {toasts.map((t) => (
         <ToastItem key={t.id} entry={t} />
@@ -152,6 +153,7 @@ function ToastItem({ entry }: { entry: ToastEntry }) {
     <div
       className={`toast ${meta.className}`}
       role={entry.kind === 'error' ? 'alert' : 'status'}
+      data-testid={`toast-${entry.kind}`}
     >
       <span
         aria-hidden

@@ -109,10 +109,12 @@ export function DialogBox({
       role="dialog"
       aria-modal="false"
       aria-label={`${npcName ?? npcId}와의 대화`}
+      data-testid="dialog-box"
+      data-npc-id={npcId}
     >
       {/* Header — name + affinity/emotion indicator + close button. */}
       <div className="flex items-center justify-between gap-3 mb-2">
-        <h3 className="text-base font-bold text-orange-primary shrink-0">
+        <h3 className="text-base font-bold text-orange-primary shrink-0" data-testid="dialog-npc-name">
           {npcName ?? npcId}
         </h3>
         {/* Phase 3.3 — affinity + emotion at-a-glance (FR-007). */}
@@ -124,6 +126,7 @@ export function DialogBox({
           onClick={onClose}
           className="btn-icon"
           aria-label="대화 닫기"
+          data-testid="dialog-close"
         >
           <span aria-hidden>×</span>
         </button>
@@ -144,6 +147,7 @@ export function DialogBox({
       <div
         ref={scrollRef}
         className="bg-gray-900/60 rounded p-2 mb-2 h-40 overflow-y-auto text-sm space-y-1.5"
+        data-testid="dialog-history"
       >
         {history.length === 0 && !isWaiting && (
           <p className="text-gray-400 text-xs italic animate-fade-in">
@@ -176,6 +180,7 @@ export function DialogBox({
           placeholder="메시지를 입력하세요..."
           aria-label="대화 입력"
           className="flex-1 px-3 py-2 rounded bg-gray-700 text-white placeholder-gray-400 border border-gray-600 focus:outline-none focus:border-orange-primary focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-50"
+          data-testid="dialog-input"
         />
         <button
           type="button"
@@ -183,6 +188,7 @@ export function DialogBox({
           disabled={isWaiting || inputValue.trim().length === 0}
           className="btn-game"
           aria-label="전송"
+          data-testid="dialog-send"
         >
           전송
         </button>
@@ -202,7 +208,10 @@ export function DialogBox({
 function DialogTurn({ entry }: { entry: DialogHistoryEntry }) {
   const isUser = entry.role === 'user';
   return (
-    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} animate-fade-in`}>
+    <div
+      className={`flex ${isUser ? 'justify-end' : 'justify-start'} animate-fade-in`}
+      data-testid={isUser ? 'dialog-turn-user' : 'dialog-turn-assistant'}
+    >
       <div
         className={
           isUser

@@ -407,6 +407,9 @@ export class IndoorScene {
     this.story.destroy();
     this.schedule.destroy();
     this.effects.destroy();
+    // Phase QA-2 — see GameScene.destroy(): fence the save system so a save
+    // racing the scene swap can't serialise through the destroyed player.
+    this.save.destroy();
     useGameStore.getState().closeDialog();
     this.entityManager.destroyAll();
     this.player.destroy();

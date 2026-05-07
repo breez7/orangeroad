@@ -277,6 +277,54 @@ test.describe('Save routes', () => {
     expect(Array.isArray(body.issues)).toBe(true);
   });
 
+  // Phase QA-2: confirm the v2 schema landed in #23 actually round-trips
+  // through the backend. Without this, the FE's `currentScene` slice could
+  // silently regress and we'd only notice on a player loading an indoor save.
+  test('POST /save/:slot with v2 indoor payload — currentScene round-trips', async () => {
+    const SLOT_V2 = 'apitest-v2';
+    await api.delete(`/save/${SLOT_V2}`);
+    const v2Payload = {
+      ...VALID_SAVE_PAYLOAD,
+      version: 2 as const,
+      savedAt: Date.now(),
+      label: 'api-test-v2',
+      currentScene: { kind: 'indoor' as const, sceneId: 'cafe' },
+    };
+    const post = await api.post(`/save/${SLOT_V2}`, { data: v2Payload });
+    expect(post.status()).toBe(200);
+
+    const get = await api.get(`/save/${SLOT_V2}`);
+    expect(get.status()).toBe(200);
+    const fetched = await get.json();
+    expect(fetched.version).toBe(2);
+    expect(fetched.currentScene).toEqual({ kind: 'indoor', sceneId: 'cafe' });
+    expect(fetched.label).toBe('api-test-v2');
+
+    await api.delete(`/save/${SLOT_V2}`);
+  });
+
+  test('POST /save/:slot with v2 outdoor payload — outdoor kind preserved', async () => {
+    const SLOT_V2_OUT = 'apitest-v2-out';
+    await api.delete(`/save/${SLOT_V2_OUT}`);
+    const v2Payload = {
+      ...VALID_SAVE_PAYLOAD,
+      version: 2 as const,
+      savedAt: Date.now(),
+      label: 'api-test-v2-out',
+      currentScene: { kind: 'outdoor' as const },
+    };
+    const post = await api.post(`/save/${SLOT_V2_OUT}`, { data: v2Payload });
+    expect(post.status()).toBe(200);
+
+    const get = await api.get(`/save/${SLOT_V2_OUT}`);
+    expect(get.status()).toBe(200);
+    const fetched = await get.json();
+    expect(fetched.version).toBe(2);
+    expect(fetched.currentScene).toEqual({ kind: 'outdoor' });
+
+    await api.delete(`/save/${SLOT_V2_OUT}`);
+  });
+
   test('POST /save/:slot with non-JSON body → 400 invalid_request', async () => {
     const res = await api.post('/save/badjson', {
       headers: { 'Content-Type': 'application/json' },

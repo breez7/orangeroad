@@ -238,7 +238,7 @@ export class GameScene {
     this.movement.attach();
 
     const banner = new Text({
-      text: '오렌지로드 마을 — Phase 4.2 (일과)',
+      text: '오렌지로드 마을',
       style: {
         fontFamily: 'system-ui, -apple-system, sans-serif',
         fontSize: 18,
@@ -490,6 +490,10 @@ export class GameScene {
     this.story.destroy();
     // Phase 4.2 — tear down schedule system (unsubscribe + abort fetch).
     this.schedule.destroy();
+    // Phase QA-2 — fence the save system so a concurrent save/load fired
+    // mid-scene-swap (e.g. user clicks "save" the same frame a doorway is
+    // crossed) can't serialise through the just-destroyed player ref.
+    this.save.destroy();
     // Phase 5.2 — destroy any in-flight particles before the scene root
     // tears down. The effects layer is a child of root so the root.destroy
     // below would cascade-clean it anyway, but explicit teardown clears

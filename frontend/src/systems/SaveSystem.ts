@@ -60,11 +60,25 @@ export class SaveSystem {
   private readonly timeSystem: TimeSystem;
   private readonly player: Player;
   private readonly entityManager: EntityManager;
+  /**
+   * Phase QA-2 — once the owning scene tears down, every other system here
+   * (`MovementSystem`, `DialogSystem`, etc.) bails out of in-flight calls via
+   * its own `destroyed` flag. SaveSystem now mirrors that contract so a
+   * concurrent save/load triggered mid-scene-swap (e.g. user clicks save at
+   * the exact frame a doorway is crossed) doesn't serialise through a
+   * dangling `player` / `entityManager` reference.
+   */
+  private destroyed = false;
 
   constructor(deps: SaveSystemDeps) {
     this.timeSystem = deps.timeSystem;
     this.player = deps.player;
     this.entityManager = deps.entityManager;
+  }
+
+  /** Mark the system as torn down so any concurrent save/load no-ops cleanly. */
+  destroy(): void {
+    this.destroyed = true;
   }
 
   /**
@@ -136,6 +150,9 @@ export class SaveSystem {
    * uniform "save failed" path.
    */
   async save(slotId: string, label?: string): Promise<SaveCreateResult> {
+    if (this.destroyed) {
+      throw new SaveError(`save aborted — system was torn down (slot ${slotId})`);
+    }
     const payload = this.buildPayload(label);
     try {
       return await createSave(slotId, payload);
@@ -150,6 +167,9 @@ export class SaveSystem {
    * which keeps the store-driven UI from blinking the old positions).
    */
   async load(slotId: string): Promise<GameSavePayload> {
+    if (this.destroyed) {
+      throw new SaveError(`load aborted — system was torn down (slot ${slotId})`);
+    }
     let payload: GameSavePayload;
     try {
       payload = await loadSave(slotId);

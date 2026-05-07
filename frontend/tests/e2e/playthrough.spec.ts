@@ -743,6 +743,87 @@ test('mandatory 11-step end-to-end playthrough', async ({ page }) => {
     Math.hypot((madokaPos as { x: number; y: number }).x - 42, (madokaPos as { x: number; y: number }).y - 42),
   ).toBeGreaterThan(10);
 
+  // ---- Step 12: indoor scene round-trip via doorway-entry path -----------
+  // This step exercises the *natural* path the player takes: walk to the
+  // center of an enterable building → GameScene.checkDoorwayEntry fires →
+  // Game.enterIndoor swaps the scene → ScheduleSystem-driven NPCs spawn in
+  // the room → walk to the door tile inside → IndoorScene.checkDoorExit
+  // fires → Game.exitIndoor swaps back. The dev `enterIndoor()` shortcut is
+  // verified in the API tests, not here, so this asserts the actual code
+  // path the player uses.
+  //
+  // Step 12a — teleport into the cafe doorway disc (cafe rect center is
+  // (580, 520); 60px ENTER_RADIUS gate). teleportPlayer leaves the player
+  // at-rest, which is what checkDoorwayEntry waits for.
+  await page.evaluate(() => {
+    (
+      window as unknown as { __game: { teleportPlayer: (x: number, y: number) => void } }
+    ).__game.teleportPlayer(580, 520);
+  });
+  await page.waitForFunction(
+    () => {
+      const s = (
+        window as unknown as {
+          __store: {
+            getState: () => {
+              currentScene: { kind: 'outdoor' } | { kind: 'indoor'; sceneId: string };
+            };
+          };
+        }
+      ).__store.getState();
+      return s.currentScene.kind === 'indoor' && s.currentScene.sceneId === 'cafe';
+    },
+    { timeout: 4_000 },
+  );
+
+  // Step 12b — verify the indoor scene populated NPCs from the schedule.
+  // At least one NPC should be present in the cafe room mid-day Saturday.
+  const indoorNpcCount = await page.evaluate(() => {
+    return Object.keys(
+      (
+        window as unknown as {
+          __store: { getState: () => { npcs: Record<string, unknown> } };
+        }
+      ).__store.getState().npcs,
+    ).length;
+  });
+  expect(indoorNpcCount, 'indoor cafe should have NPCs from schedule').toBeGreaterThan(0);
+
+  // Step 12c — natural exit. The IndoorScene gates exit on `exitArmed`,
+  // which only flips true once the player has walked further than
+  // 1.6 * doorZone.r (57.6 px) from doorReturn. The player spawns ON
+  // doorReturn so we first teleport into the middle of the room, wait for
+  // the scene's next update tick to arm the exit, then teleport back to
+  // the door tile — which fires `onRequestExit` and swaps to outdoor.
+  await page.evaluate(() => {
+    (
+      window as unknown as { __game: { teleportPlayer: (x: number, y: number) => void } }
+    ).__game.teleportPlayer(640, 360); // mid-room
+  });
+  // Give the IndoorScene a couple of frames to arm the exit gate.
+  await page.waitForTimeout(120);
+  // Cafe doorReturn from indoorScenes.ts: (INDOOR_W/2, INDOOR_H-80) = (640, 640).
+  await page.evaluate(() => {
+    (
+      window as unknown as { __game: { teleportPlayer: (x: number, y: number) => void } }
+    ).__game.teleportPlayer(640, 640);
+  });
+  await page.waitForFunction(
+    () => {
+      const s = (
+        window as unknown as {
+          __store: {
+            getState: () => {
+              currentScene: { kind: 'outdoor' } | { kind: 'indoor'; sceneId: string };
+            };
+          };
+        }
+      ).__store.getState();
+      return s.currentScene.kind === 'outdoor';
+    },
+    { timeout: 4_000 },
+  );
+
   // ---- Final assertions: zero console errors/warns, zero 5xx, zero pageerrors -
   expect(diag.pageErrors, `Page errors:\n${diag.pageErrors.join('\n')}`).toEqual([]);
   expect(

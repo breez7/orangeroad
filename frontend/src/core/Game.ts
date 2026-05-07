@@ -1,5 +1,6 @@
 import { Application, Ticker } from 'pixi.js';
 import { GameScene } from '@/scenes/GameScene';
+import type { DialogSystem } from '@/systems/DialogSystem';
 
 export class Game {
   private app: Application | null = null;
@@ -7,6 +8,16 @@ export class Game {
   private resizeObserver: ResizeObserver | null = null;
   private destroyed = false;
   private tickHandler: ((ticker: Ticker) => void) | null = null;
+
+  /** Currently-active scene (or null before init / after destroy). */
+  get currentScene(): GameScene | null {
+    return this.scene;
+  }
+
+  /** Convenience accessor for the dialog system on the active scene. */
+  get dialogSystem(): DialogSystem | null {
+    return this.scene?.dialog ?? null;
+  }
 
   async init(host: HTMLElement): Promise<void> {
     if (this.destroyed) return;

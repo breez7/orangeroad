@@ -5,12 +5,14 @@ import { EntityManager } from '@/entities/EntityManager';
 import { LOCATIONS, TOWN_BOUNDS } from '@/data/locations';
 import { NPCS } from '@/data/npcs';
 import { MovementSystem } from '@/systems/MovementSystem';
+import { DialogSystem } from '@/systems/DialogSystem';
 import { useGameStore } from '@/store/gameStore';
 
 export class GameScene {
   readonly root: Container;
   readonly player: Player;
   readonly entityManager: EntityManager;
+  readonly dialog: DialogSystem;
   private readonly locations: Location[] = [];
   private readonly movement: MovementSystem;
   private readonly npcLayer: Container;
@@ -62,18 +64,30 @@ export class GameScene {
     this.root.addChild(this.player.view);
     useGameStore.getState().setPlayerPosition({ x: spawn.x, y: spawn.y });
 
+    // Phase 2.3 — DialogSystem owns NPC-talk interaction state. It is
+    // stateless w.r.t. UI (state lives in the Zustand store) and is wired
+    // into MovementSystem as a click-interceptor so clicking an NPC in
+    // range opens the dialog instead of walking past them.
+    this.dialog = new DialogSystem({
+      player: this.player,
+      entityManager: this.entityManager,
+    });
+
     // Click-to-walk system. Bind events on the scene root so empty grass
-    // between location tiles still registers clicks.
+    // between location tiles still registers clicks. The dialog system gets
+    // first crack at every click; movement ignores input while dialog is open.
     this.movement = new MovementSystem({
       townRoot: this.root,
       player: this.player,
       bounds: TOWN_BOUNDS,
       locations: LOCATIONS,
+      onClickIntercept: (lx, ly) => this.dialog.tryOpenAtPoint(lx, ly),
+      isInputBlocked: () => this.dialog.isOpen,
     });
     this.movement.attach();
 
     const banner = new Text({
-      text: '오렌지로드 마을 — Phase 2.1 (NPC 배치)',
+      text: '오렌지로드 마을 — Phase 2.3 (대화)',
       style: {
         fontFamily: 'system-ui, -apple-system, sans-serif',
         fontSize: 18,
@@ -113,6 +127,11 @@ export class GameScene {
 
   destroy(): void {
     this.movement.detach();
+    // Abort any in-flight dialog request and clear UI state — we do this
+    // before tearing down entities so the system's references stay valid
+    // until its destroy() returns.
+    this.dialog.destroy();
+    useGameStore.getState().closeDialog();
     // Tear down NPCs before the parent container goes away so each NPC's
     // own destroy() runs (StrictMode-safe re-init).
     this.entityManager.destroyAll();

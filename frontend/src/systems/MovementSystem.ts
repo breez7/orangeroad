@@ -13,6 +13,18 @@ export interface MovementSystemOptions {
   locations?: LocationDef[];
   /** Inset margin so the player doesn't push into walls. Defaults to player radius + 4. */
   margin?: number;
+  /**
+   * Optional hook called BEFORE the click is treated as a walk target.
+   * Receives the click position in town-local coordinates. If the callback
+   * returns true the click is consumed and no walk-to is issued — used by
+   * the DialogSystem to convert "click an NPC in range" into a dialog open.
+   */
+  onClickIntercept?: (localX: number, localY: number) => boolean;
+  /**
+   * Optional gate: while it returns true, all pointer-down events are
+   * ignored entirely. Used to freeze movement while the dialog box is open.
+   */
+  isInputBlocked?: () => boolean;
 }
 
 /**
@@ -29,12 +41,19 @@ export class MovementSystem {
   private readonly bounds: { width: number; height: number };
   private readonly locations: LocationDef[];
   private readonly margin: number;
+  private readonly onClickIntercept?: (localX: number, localY: number) => boolean;
+  private readonly isInputBlocked?: () => boolean;
   private attached = false;
 
   private readonly onPointerDown = (e: FederatedPointerEvent): void => {
+    if (this.isInputBlocked?.()) return;
     // Map screen-space pointer into town-local coordinates using the
     // container's matrix. Works regardless of fitTo() scale + letterbox offset.
     const local = this.root.toLocal(e.global);
+    // Give the dialog system first crack at the click — if the user clicked
+    // an NPC who is within talk range, the click becomes "open dialog"
+    // instead of "walk here".
+    if (this.onClickIntercept?.(local.x, local.y)) return;
     const target = this.clampTarget(local.x, local.y);
     this.player.moveTo(target.x, target.y);
   };
@@ -45,6 +64,8 @@ export class MovementSystem {
     this.bounds = opts.bounds;
     this.locations = opts.locations ?? [];
     this.margin = opts.margin ?? 20;
+    this.onClickIntercept = opts.onClickIntercept;
+    this.isInputBlocked = opts.isInputBlocked;
   }
 
   attach(): void {

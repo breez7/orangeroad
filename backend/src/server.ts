@@ -2,8 +2,11 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { gameRoutes } from '@/routes/game';
-import { npcRoutes } from '@/routes/npc';
+import { createNPCRoutes } from '@/routes/npc';
 import { saveRoutes } from '@/routes/save';
+import { LLMClient } from '@/ai/LLMClient';
+import { ContextManager } from '@/ai/ContextManager';
+import { NPCService } from '@/services/NPCService';
 
 const app = new Hono();
 
@@ -25,8 +28,13 @@ app.use(
   }),
 );
 
+// --- Phase 2.2 wiring: build singletons once and inject into route factory.
+const llmClient = new LLMClient();
+const contextManager = new ContextManager();
+const npcService = new NPCService(llmClient, contextManager);
+
 app.get('/', (c) =>
-  c.json({ name: 'orangeroad-backend', version: '0.1.0', phase: '1.2' }),
+  c.json({ name: 'orangeroad-backend', version: '0.1.0', phase: '2.2' }),
 );
 
 app.get('/health', (c) =>
@@ -34,7 +42,7 @@ app.get('/health', (c) =>
 );
 
 app.route('/game', gameRoutes);
-app.route('/npc', npcRoutes);
+app.route('/npc', createNPCRoutes({ npcService }));
 app.route('/save', saveRoutes);
 
 app.notFound((c) => c.json({ error: 'not_found', path: c.req.path }, 404));

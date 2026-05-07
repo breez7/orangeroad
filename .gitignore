@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+*.log
+
+# Environment
+.env
+.env.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Save data (local only)
+saves/*.json
+!saves/.gitkeep
+
+# OS
+.DS_Store
+Thumbs.db

@@ -91,67 +91,20 @@ export class MovementSystem {
     this.attached = false;
   }
 
-  /** Clamp target into bounds and softly nudge out of location rects. */
+  /**
+   * Clamp the click target into the town's outer bounds. Buildings (location
+   * rects) are walkable: NPCs do their schedule activities inside them and
+   * the player needs to step in to talk. The earlier "snap-out of building"
+   * collision was incompatible with that.
+   *
+   * `locations` is kept as a constructor option so the field still references
+   * something — future indoor-scene transition (Phase C) will use it.
+   */
   private clampTarget(x: number, y: number): { x: number; y: number } {
     const m = this.margin;
-    const cx0 = Math.max(m, Math.min(this.bounds.width - m, x));
-    const cy0 = Math.max(m, Math.min(this.bounds.height - m, y));
-
-    const inside = (px: number, py: number, loc: LocationDef): boolean =>
-      px > loc.x && px < loc.x + loc.width && py > loc.y && py < loc.y + loc.height;
-
-    const insideAny = (px: number, py: number): boolean =>
-      this.locations.some((l) => inside(px, py, l));
-
-    const inBounds = (px: number, py: number): boolean =>
-      px >= m && px <= this.bounds.width - m && py >= m && py <= this.bounds.height - m;
-
-    // Find the deepest-overlapping location and try snapping out to each of
-    // its four edges. Pick the candidate closest to the original target that
-    // is in-bounds and not inside any other location rect. Iterate up to 4
-    // times so a snap that lands in an adjacent rect can be re-snapped.
-    let cx = cx0;
-    let cy = cy0;
-    for (let iter = 0; iter < 4; iter++) {
-      const overlap = this.locations.find((l) => inside(cx, cy, l));
-      if (!overlap) break;
-
-      const candidates = [
-        { x: overlap.x - m, y: cy }, // left
-        { x: overlap.x + overlap.width + m, y: cy }, // right
-        { x: cx, y: overlap.y - m }, // top
-        { x: cx, y: overlap.y + overlap.height + m }, // bottom
-      ].filter((p) => inBounds(p.x, p.y) && !insideAny(p.x, p.y));
-
-      if (candidates.length === 0) {
-        // No valid edge candidate (e.g. building hugs the bounds AND has
-        // a neighbor on every other side). Fall back to nearest in-bounds
-        // edge of THIS rect even if it overlaps a neighbor — better than
-        // staying inside.
-        const fallback = [
-          { x: overlap.x - m, y: cy },
-          { x: overlap.x + overlap.width + m, y: cy },
-          { x: cx, y: overlap.y - m },
-          { x: cx, y: overlap.y + overlap.height + m },
-        ].map((p) => ({
-          x: Math.max(m, Math.min(this.bounds.width - m, p.x)),
-          y: Math.max(m, Math.min(this.bounds.height - m, p.y)),
-        }));
-        const best = fallback.reduce((a, b) =>
-          (a.x - cx0) ** 2 + (a.y - cy0) ** 2 <= (b.x - cx0) ** 2 + (b.y - cy0) ** 2 ? a : b,
-        );
-        cx = best.x;
-        cy = best.y;
-        break;
-      }
-
-      const best = candidates.reduce((a, b) =>
-        (a.x - cx0) ** 2 + (a.y - cy0) ** 2 <= (b.x - cx0) ** 2 + (b.y - cy0) ** 2 ? a : b,
-      );
-      cx = best.x;
-      cy = best.y;
-    }
-
-    return { x: cx, y: cy };
+    return {
+      x: Math.max(m, Math.min(this.bounds.width - m, x)),
+      y: Math.max(m, Math.min(this.bounds.height - m, y)),
+    };
   }
 }

@@ -111,8 +111,10 @@ export class TimeSystem {
 
   constructor(opts: TimeSystemOptions = {}) {
     this.day = opts.startDay ?? 1;
-    this.hour = opts.startHour ?? 8;
-    this.minute = opts.startMinute ?? 0;
+    // Day 1 is Saturday 10:30 — see gameStore.initialTime for the rationale
+    // (weekend lets NPCs scatter naturally on the very first morning).
+    this.hour = opts.startHour ?? 10;
+    this.minute = opts.startMinute ?? 30;
     this.baseSecondsPerMinute = opts.secondsPerGameMinute ?? 2;
 
     // Push initial snapshot so UI shows the start state immediately, before
@@ -156,8 +158,11 @@ export class TimeSystem {
   }
 
   getDayOfWeek(): DayOfWeek {
-    // `day` is 1-indexed and day 1 = MON.
-    const idx = ((this.day - 1) % 7 + 7) % 7;
+    // `day` is 1-indexed and day 1 = SAT (이사 오는 날 = 토요일). Story-wise,
+    // moving in on a weekend day is more natural than a Monday morning, and
+    // it puts NPCs on weekend schedules (park / cafe / home) on day 1 instead
+    // of clustering them all at school for "오전 수업".
+    const idx = ((this.day - 1 + 5) % 7 + 7) % 7; // 0..6 → MON..SUN; +5 anchors day 1 to SAT
     return DAY_OF_WEEK_ORDER[idx]!;
   }
 

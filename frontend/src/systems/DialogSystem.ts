@@ -87,8 +87,10 @@ export class DialogSystem {
     if (this.destroyed) return false;
 
     // 1. Find NPC under the click — generous radius so small sprites still
-    //    feel clickable. NPC.RADIUS is 16; we use 22 to forgive imprecision.
-    const CLICK_RADIUS = 22;
+    //    feel clickable. NPC body is ~16px but with the SD-style hair/torso
+    //    the visible silhouette is closer to 30px tall, so 32 matches what the
+    //    user sees and forgives a few pixels of mis-aim.
+    const CLICK_RADIUS = 32;
     let clicked: { id: string; distance: number } | null = null;
     for (const npc of this.entityManager.all()) {
       const dx = npc.x - localX;

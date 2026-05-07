@@ -248,12 +248,15 @@ const initialDialog: DialogSlice = {
 // TimeSystem pushes its real snapshot in its constructor, so this is just a
 // safe placeholder for any selector that reads `time` before TimeSystem
 // instantiates.
+// Day 1 is Saturday morning ("이사 오는 날"). Picking 10:30 puts everyone on
+// weekend schedules — Madoka/Hikaru/Yusaku at the park, Seiko at the cafe,
+// Manta/Kurumi at Kyousuke's home — instead of all clustering at school.
 const initialTime: TimeSlice = {
   day: 1,
-  hour: 8,
-  minute: 0,
-  dayOfWeek: 'MON',
-  phaseLabel: '오전 수업',
+  hour: 10,
+  minute: 30,
+  dayOfWeek: 'SAT',
+  phaseLabel: '아침',
 };
 
 // Phase 3.3 — initialise relationships from the NPC roster with the same

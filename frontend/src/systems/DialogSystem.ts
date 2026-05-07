@@ -63,6 +63,12 @@ export class DialogSystem {
     return useGameStore.getState().dialog.open;
   }
 
+  /** Phase A-2 — exposed so the per-frame interaction-hint loop in the
+   *  scene uses the exact same radius as `tryOpenAtPoint`. */
+  get interactRadiusValue(): number {
+    return this.interactRadius;
+  }
+
   /** Find the NPC closest to a given point, within the interact radius. */
   getNearestNPC(
     point: { x: number; y: number },

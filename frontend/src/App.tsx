@@ -7,7 +7,11 @@ import { SaveSlotsPanel } from '@/ui/components/SaveSlotsPanel';
 import { StoryOverlay } from '@/ui/components/StoryOverlay';
 import { HelpPanel } from '@/ui/components/HelpPanel';
 import { AudioPanel } from '@/ui/components/AudioPanel';
-import { ToastContainer } from '@/ui/components/Toast';
+import { ToastContainer, toast } from '@/ui/components/Toast';
+
+// Phase A-2 — onboarding toast key. Persists across saves: even if the
+// player loads a fresh save, we don't want to nag them with the hint again.
+const ONBOARDING_LS_KEY = 'orangeroad:onboarding-shown';
 
 function App() {
   const phase = useGameStore((s) => s.phase);
@@ -150,6 +154,40 @@ function App() {
     return () => {
       gameRef.current = null;
       game.destroy();
+    };
+  }, []);
+
+  // Phase A-2 — onboarding toast. Fires once after the intro completes, then
+  // remembers (via localStorage) so subsequent loads / new games don't repeat
+  // the hint. The watcher is keyed on the `intro_complete` flag in the
+  // gameStore; we read the latest value via subscribe so a flag set inside
+  // StorySystem reaches us regardless of whether App re-rendered.
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const fire = () => {
+      try {
+        if (window.localStorage.getItem(ONBOARDING_LS_KEY)) return;
+        window.localStorage.setItem(ONBOARDING_LS_KEY, '1');
+      } catch {
+        // localStorage unavailable (incognito + cookies blocked etc.) — fall
+        // through and just show the toast; worst case is showing it twice.
+      }
+      toast.info(
+        '마을을 둘러보고 친구들과 대화해보세요. 빛나는 친구는 클릭해서 말을 걸 수 있어요.',
+        7000,
+      );
+    };
+    // If the flag is already set when this effect mounts (e.g. user loaded
+    // a save where the intro is done), don't fire — only fire on the
+    // *transition* from unset → set so it's the moment the intro just ended.
+    let prev = useGameStore.getState().flags['intro_complete'] === true;
+    const unsub = useGameStore.subscribe((state) => {
+      const cur = state.flags['intro_complete'] === true;
+      if (cur && !prev) fire();
+      prev = cur;
+    });
+    return () => {
+      unsub();
     };
   }, []);
 

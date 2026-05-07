@@ -39,7 +39,6 @@ export class MovementSystem {
   private readonly root: Container;
   private readonly player: Player;
   private readonly bounds: { width: number; height: number };
-  private readonly locations: LocationDef[];
   private readonly margin: number;
   private readonly onClickIntercept?: (localX: number, localY: number) => boolean;
   private readonly isInputBlocked?: () => boolean;
@@ -62,7 +61,6 @@ export class MovementSystem {
     this.root = opts.townRoot;
     this.player = opts.player;
     this.bounds = opts.bounds;
-    this.locations = opts.locations ?? [];
     this.margin = opts.margin ?? 20;
     this.onClickIntercept = opts.onClickIntercept;
     this.isInputBlocked = opts.isInputBlocked;
@@ -97,8 +95,9 @@ export class MovementSystem {
    * the player needs to step in to talk. The earlier "snap-out of building"
    * collision was incompatible with that.
    *
-   * `locations` is kept as a constructor option so the field still references
-   * something — future indoor-scene transition (Phase C) will use it.
+   * The `locations` constructor option is accepted (and kept on the type)
+   * for forward compatibility with the Phase C indoor-scene transition,
+   * which will reuse the rect data to map outdoor → indoor doors.
    */
   private clampTarget(x: number, y: number): { x: number; y: number } {
     const m = this.margin;

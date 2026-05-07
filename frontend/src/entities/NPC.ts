@@ -46,6 +46,17 @@ export class NPC {
   /** Approximate body radius (matches Player.RADIUS for parity). */
   static readonly RADIUS = 16;
 
+  /**
+   * Phase A-2 — interactable hint. The ring is drawn underneath the body at
+   * z-order index 0 of the container, breathes with a sine wave when active,
+   * and is invisible when inactive. The DialogSystem-driven hint loop in
+   * GameScene calls `setHighlight(true)` for the NPC closest to the player
+   * within talk range, and `setHighlight(false)` for everyone else.
+   */
+  private readonly highlightRing: Graphics;
+  private highlightActive = false;
+  private highlightPhase = 0;
+
   constructor(def: NPCDef, opts: NPCOptions = {}) {
     this.id = def.id;
     this.name = def.name;
@@ -59,6 +70,13 @@ export class NPC {
     container.label = `npc:${def.id}`;
     container.x = this.x;
     container.y = this.y;
+
+    // Highlight ring — drawn before everything else so the body sits on top.
+    // Repainted per-frame in `update()` when active so we can breathe the
+    // alpha/scale; invisible by default.
+    this.highlightRing = new Graphics();
+    this.highlightRing.visible = false;
+    container.addChild(this.highlightRing);
 
     // Shadow — same footprint as Player so the scene reads consistently.
     const shadow = new Graphics();
@@ -112,11 +130,30 @@ export class NPC {
   }
 
   /**
-   * Per-frame update. Phase 2.1 NPCs are stationary, so this is a no-op stub.
-   * Phase 2.2/2.3 will introduce AI-driven movement here.
+   * Per-frame update. NPCs are stationary (movement is via teleport from
+   * ScheduleSystem) but we tick the highlight ring's breathe animation here
+   * so the visual is buttery rather than constant.
    */
-  update(_dt: number): void {
-    // Intentionally empty — NPCs do not move yet.
+  update(dt: number): void {
+    if (!this.highlightActive) return;
+    this.highlightPhase += dt;
+    // Sin wave 0..1 at ~1.5 Hz. Keeps the ring breathing without being noisy.
+    const t = (Math.sin(this.highlightPhase * Math.PI * 1.5) + 1) / 2;
+    const alpha = 0.45 + 0.35 * t; // 0.45..0.80
+    const radius = 22 + 4 * t; // 22..26
+    this.highlightRing.clear();
+    this.highlightRing.circle(0, 4, radius);
+    this.highlightRing.stroke({ color: 0xffd166, width: 3, alpha });
+  }
+
+  /**
+   * Toggle the in-range hint ring under this NPC. Idempotent.
+   */
+  setHighlight(active: boolean): void {
+    if (this.highlightActive === active) return;
+    this.highlightActive = active;
+    this.highlightRing.visible = active;
+    if (!active) this.highlightRing.clear();
   }
 
   /**

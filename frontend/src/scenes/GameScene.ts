@@ -200,12 +200,32 @@ export class GameScene {
       store.setPlayerPosition({ x: px, y: py });
       // Phase 4.1 — keep the coarse player-location id fresh so the
       // StorySystem's ON_LOCATION_ENTER trigger has something to evaluate
-      // against. Soft-snapping pushes the player out of building rects most
-      // of the time, so this is usually null while moving.
+      // against. Phase A-1: location rects are walkable so this stays in sync
+      // with the room the player is standing inside.
       const loc = findLocationAt(px, py);
       if (loc !== store.playerLocationId) {
         store.setPlayerLocationId(loc);
       }
+    }
+    this.updateInteractionHints();
+  }
+
+  /**
+   * Phase A-2 — toggle the highlight ring on every NPC based on player
+   * proximity. The dialog system's interact radius is the source of truth so
+   * "the NPC is glowing" ↔ "clicking opens dialog right now" is always true.
+   */
+  private updateInteractionHints(): void {
+    if (this.dialog.isOpen) {
+      // Don't visually invite clicks while the dialog box is up.
+      for (const npc of this.entityManager.all()) npc.setHighlight(false);
+      return;
+    }
+    const px = this.player.x;
+    const py = this.player.y;
+    for (const npc of this.entityManager.all()) {
+      const d = Math.hypot(npc.x - px, npc.y - py);
+      npc.setHighlight(d <= this.dialog.interactRadiusValue);
     }
   }
 

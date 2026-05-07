@@ -1,4 +1,4 @@
-import { Application } from 'pixi.js';
+import { Application, Ticker } from 'pixi.js';
 import { GameScene } from '@/scenes/GameScene';
 
 export class Game {
@@ -6,6 +6,7 @@ export class Game {
   private scene: GameScene | null = null;
   private resizeObserver: ResizeObserver | null = null;
   private destroyed = false;
+  private tickHandler: ((ticker: Ticker) => void) | null = null;
 
   async init(host: HTMLElement): Promise<void> {
     if (this.destroyed) return;
@@ -34,6 +35,12 @@ export class Game {
     app.stage.addChild(this.scene.root);
     this.scene.fitTo(app.screen.width, app.screen.height);
 
+    this.tickHandler = (ticker: Ticker) => {
+      if (!this.scene) return;
+      this.scene.update(ticker.deltaMS / 1000);
+    };
+    app.ticker.add(this.tickHandler);
+
     this.resizeObserver = new ResizeObserver(() => {
       if (!this.app || !this.scene) return;
       this.scene.fitTo(this.app.screen.width, this.app.screen.height);
@@ -45,6 +52,11 @@ export class Game {
     this.destroyed = true;
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
+
+    if (this.app && this.tickHandler) {
+      this.app.ticker.remove(this.tickHandler);
+    }
+    this.tickHandler = null;
 
     if (this.scene) {
       this.scene.destroy();

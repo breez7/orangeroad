@@ -1,10 +1,15 @@
 import { Container, Graphics, Text } from 'pixi.js';
 import { Location } from '@/entities/Location';
+import { Player } from '@/entities/Player';
 import { LOCATIONS, TOWN_BOUNDS } from '@/data/locations';
+import { MovementSystem } from '@/systems/MovementSystem';
+import { useGameStore } from '@/store/gameStore';
 
 export class GameScene {
   readonly root: Container;
+  readonly player: Player;
   private readonly locations: Location[] = [];
+  private readonly movement: MovementSystem;
 
   constructor() {
     this.root = new Container();
@@ -32,8 +37,24 @@ export class GameScene {
       this.locations.push(loc);
     }
 
+    // Spawn player at town center, above locations.
+    const spawn = { x: TOWN_BOUNDS.width / 2, y: TOWN_BOUNDS.height / 2 };
+    this.player = new Player({ x: spawn.x, y: spawn.y, speed: 220 });
+    this.root.addChild(this.player.view);
+    useGameStore.getState().setPlayerPosition({ x: spawn.x, y: spawn.y });
+
+    // Click-to-walk system. Bind events on the scene root so empty grass
+    // between location tiles still registers clicks.
+    this.movement = new MovementSystem({
+      townRoot: this.root,
+      player: this.player,
+      bounds: TOWN_BOUNDS,
+      locations: LOCATIONS,
+    });
+    this.movement.attach();
+
     const banner = new Text({
-      text: '오렌지로드 마을 — Phase 1.3',
+      text: '오렌지로드 마을 — Phase 1.4 (클릭하여 이동)',
       style: {
         fontFamily: 'system-ui, -apple-system, sans-serif',
         fontSize: 18,
@@ -44,7 +65,20 @@ export class GameScene {
     banner.anchor.set(0.5, 0);
     banner.x = TOWN_BOUNDS.width / 2;
     banner.y = 12;
+    // Banner shouldn't swallow clicks — the scene root is the click target.
+    banner.eventMode = 'none';
     this.root.addChild(banner);
+  }
+
+  /** Per-frame update; called from Game.ts ticker. `dt` is in seconds. */
+  update(dt: number): void {
+    this.player.update(dt);
+    if (this.player.isMoving) {
+      useGameStore.getState().setPlayerPosition({
+        x: this.player.x,
+        y: this.player.y,
+      });
+    }
   }
 
   fitTo(viewWidth: number, viewHeight: number): void {
@@ -58,6 +92,8 @@ export class GameScene {
   }
 
   destroy(): void {
+    this.movement.detach();
+    this.player.destroy();
     for (const loc of this.locations) loc.destroy();
     this.locations.length = 0;
     this.root.destroy({ children: true });

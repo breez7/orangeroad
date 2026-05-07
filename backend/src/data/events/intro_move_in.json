@@ -1,0 +1,49 @@
+{
+  "id": "intro_move_in",
+  "title": "이사 오는 날",
+  "description": "쿄우스케 가족이 새 동네로 이사 온 첫 날. 우연히 마도카와 마주친다.",
+  "trigger": { "type": "ON_START" },
+  "requires": [
+    { "type": "FLAG_NOT_SET", "flag": "intro_complete" }
+  ],
+  "once": true,
+  "steps": [
+    {
+      "type": "narration",
+      "text": "쿄우스케 가족이 새 집으로 이사 온 날.\n또 전학이라니 — 짐을 정리하면서 한숨이 절로 나온다."
+    },
+    {
+      "type": "teleport_player",
+      "x": 650,
+      "y": 280
+    },
+    {
+      "type": "narration",
+      "text": "쿄우스케는 잠시 바람을 쐬러 집 앞으로 나왔다.\n낯선 동네지만, 어쩐지 햇살은 따뜻하다."
+    },
+    {
+      "type": "set_emotion",
+      "npcId": "madoka",
+      "emotion": "shy"
+    },
+    {
+      "type": "dialog",
+      "speaker": "madoka",
+      "text": "...어, 새로 이사 온 사람이야?\n나는 아야카와 마도카. 잘 부탁해."
+    },
+    {
+      "type": "set_affinity",
+      "npcId": "madoka",
+      "delta": 5
+    },
+    {
+      "type": "narration",
+      "text": "이상한 기분이 든다.\n앞으로의 학교 생활이 — 어쩌면 나쁘지 않을지도 모르겠다."
+    },
+    {
+      "type": "set_flag",
+      "flag": "intro_complete",
+      "value": true
+    }
+  ]
+}

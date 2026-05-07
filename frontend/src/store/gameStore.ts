@@ -70,6 +70,32 @@ export interface DialogSlice {
 }
 
 /**
+ * Story flag value type — open enough for booleans, counters, or short
+ * authoring strings. Phase 4.1 only uses booleans in event scripts but
+ * keeping the slot open prevents a future migration if we add e.g.
+ * `madoka_route_progress: 2`.
+ */
+export type FlagValue = boolean | string | number;
+
+/**
+ * Story slice (Phase 4.1 — FR-006).
+ *
+ * Tracks the currently-playing scripted event (if any) and the cumulative
+ * list of event ids that have already fired in this save (used to gate
+ * `once: true` events). The actual event scripts (steps array, etc.) are
+ * fetched on-demand from the backend by StorySystem; the store only holds
+ * the playback cursor.
+ */
+export interface StorySlice {
+  /** id of the event currently playing, or null when free play. */
+  activeEventId: string | null;
+  /** Index of the next step to play within the active event. */
+  stepIndex: number;
+  /** Cumulative list of event ids that have already fired (per save). */
+  fireHistory: string[];
+}
+
+/**
  * Time slice (Phase 3.1 — FR-004).
  *
  * Holds a denormalised, ready-for-render snapshot of the game clock. The
@@ -118,6 +144,31 @@ interface GameStoreState {
   relationships: Record<string, RelationshipEntry>;
   setRelationship: (npcId: string, data: RelationshipEntry) => void;
   setRelationships: (record: Record<string, RelationshipEntry>) => void;
+
+  // --- Phase 4.1 story / flags (FR-006) -------------------------------------
+  flags: Record<string, FlagValue>;
+  setFlag: (key: string, value?: FlagValue) => void;
+  clearFlag: (key: string) => void;
+  setFlags: (record: Record<string, FlagValue>) => void;
+
+  story: StorySlice;
+  /** Begin a scripted event. Resets stepIndex to 0. Idempotent for same id. */
+  startEvent: (eventId: string) => void;
+  /** Advance to the next step. */
+  advanceStep: () => void;
+  /** End the active event. The event id is appended to fireHistory if absent. */
+  endEvent: () => void;
+  /** Bulk replace fireHistory (used by SaveSystem.load). */
+  setStoryFireHistory: (history: string[]) => void;
+
+  /**
+   * Phase 4.1 — coarse current-location id derived from playerPosition.
+   * StorySystem keeps this fresh; UI selectors can read it for "you are at"
+   * displays without reaching into PixiJS state. Distinct from
+   * `currentLocationId` which is reserved for the destination/active scene.
+   */
+  playerLocationId: string | null;
+  setPlayerLocationId: (id: string | null) => void;
 }
 
 const initialNPCs: Record<string, NPCStoreEntry> = Object.fromEntries(
@@ -167,8 +218,14 @@ const initialRelationships: Record<string, RelationshipEntry> = Object.fromEntri
   ]),
 );
 
+const initialStory: StorySlice = {
+  activeEventId: null,
+  stepIndex: 0,
+  fireHistory: [],
+};
+
 export const useGameStore = create<GameStoreState>((set) => ({
-  phase: '3.3',
+  phase: '4.1',
   currentLocationId: null,
   setCurrentLocation: (id) => set({ currentLocationId: id }),
   playerPosition: { x: 640, y: 360 },
@@ -265,4 +322,74 @@ export const useGameStore = create<GameStoreState>((set) => ({
     set((state) => ({
       relationships: { ...state.relationships, ...record },
     })),
+
+  // --- Phase 4.1 flags + story slice (FR-006) -------------------------------
+
+  flags: {},
+
+  // setFlag with optional value defaults to `true` — the most common case is
+  // "mark complete". Short-circuits when the value is unchanged so the
+  // StorySystem ON_FLAG subscriber doesn't re-fire for a no-op write.
+  setFlag: (key, value) =>
+    set((state) => {
+      const v: FlagValue = value === undefined ? true : value;
+      if (state.flags[key] === v) return state;
+      return { flags: { ...state.flags, [key]: v } };
+    }),
+
+  clearFlag: (key) =>
+    set((state) => {
+      if (!(key in state.flags)) return state;
+      const next = { ...state.flags };
+      delete next[key];
+      return { flags: next };
+    }),
+
+  setFlags: (record) => set({ flags: { ...record } }),
+
+  story: initialStory,
+
+  startEvent: (eventId) =>
+    set((state) => {
+      if (state.story.activeEventId === eventId && state.story.stepIndex === 0) {
+        return state;
+      }
+      return {
+        story: { ...state.story, activeEventId: eventId, stepIndex: 0 },
+      };
+    }),
+
+  advanceStep: () =>
+    set((state) => {
+      if (!state.story.activeEventId) return state;
+      return {
+        story: { ...state.story, stepIndex: state.story.stepIndex + 1 },
+      };
+    }),
+
+  endEvent: () =>
+    set((state) => {
+      const id = state.story.activeEventId;
+      if (!id) return state;
+      // Append to fireHistory if not already present (idempotent on replay).
+      const fireHistory = state.story.fireHistory.includes(id)
+        ? state.story.fireHistory
+        : [...state.story.fireHistory, id];
+      return {
+        story: {
+          activeEventId: null,
+          stepIndex: 0,
+          fireHistory,
+        },
+      };
+    }),
+
+  setStoryFireHistory: (history) =>
+    set((state) => ({
+      story: { ...state.story, fireHistory: [...history] },
+    })),
+
+  playerLocationId: null,
+  setPlayerLocationId: (id) =>
+    set((state) => (state.playerLocationId === id ? state : { playerLocationId: id })),
 }));

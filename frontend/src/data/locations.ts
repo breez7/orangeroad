@@ -2,6 +2,26 @@ import type { LocationDef } from '@/entities/Location';
 
 export const TOWN_BOUNDS = { width: 1280, height: 720 } as const;
 
+/**
+ * Phase 4.1 — coarse "which location rect is this point inside?" helper used
+ * by the StorySystem to derive a `playerLocationId` for ON_LOCATION_ENTER
+ * triggers. Returns null when the point is on grass between buildings.
+ *
+ * Note: Phase 4.1 movement softly nudges the player OUT of location rects, so
+ * in practice this returns null for the player position most of the time.
+ * Story authors should generally use ON_FLAG / ON_AFFINITY / ON_START for
+ * Phase 4.1 events; ON_LOCATION_ENTER is wired up here so a future "doors"
+ * pass can light up without further plumbing changes.
+ */
+export function findLocationAt(x: number, y: number, locs: readonly LocationDef[] = LOCATIONS): string | null {
+  for (const l of locs) {
+    if (x >= l.x && x <= l.x + l.width && y >= l.y && y <= l.y + l.height) {
+      return l.id;
+    }
+  }
+  return null;
+}
+
 export const LOCATIONS: LocationDef[] = [
   {
     id: 'school',

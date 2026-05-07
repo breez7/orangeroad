@@ -100,6 +100,12 @@ export class SaveSystem {
           },
         ]),
       ),
+      // Phase 4.1 — flags + fireHistory. Both fields are optional on the
+      // wire schema for backward-compat with v1 saves written before this
+      // phase. Active-event playback state is intentionally NOT persisted
+      // (mid-event saves restart from the next eligible event on load).
+      flags: { ...state.flags },
+      story: { fireHistory: [...state.story.fireHistory] },
     };
     if (label !== undefined && label.length > 0) {
       payload.label = label;
@@ -207,6 +213,12 @@ export class SaveSystem {
       }
       store.setRelationships(rels);
     }
+
+    // Phase 4.1 — flags + story.fireHistory. Both optional for v1 backward
+    // compat. When absent we explicitly reset to empty so loading an old
+    // save doesn't leak flags from a previous game session.
+    store.setFlags(payload.flags ?? {});
+    store.setStoryFireHistory(payload.story?.fireHistory ?? []);
 
     // 3. Scene entities — teleport AFTER store updates so the position
     //    overlay reads the new value on the next selector tick.

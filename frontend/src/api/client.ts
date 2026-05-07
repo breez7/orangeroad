@@ -271,6 +271,9 @@ export interface SaveNPCEntry {
  * Phase 3.3: `relationships` is an optional field. New saves include it;
  * loading an older v1 save without it is supported (defaults applied).
  */
+/** Open value type for story flags (mirrors backend `FlagValue`). */
+export type FlagValue = boolean | string | number;
+
 export interface GameSavePayload {
   version: 1;
   savedAt: number;
@@ -281,6 +284,10 @@ export interface GameSavePayload {
   npcs: Record<string, SaveNPCEntry>;
   currentLocationId: string | null;
   relationships?: Record<string, RelationshipPayload>;
+  /** Phase 4.1 — story flags (optional for v1 backward-compat). */
+  flags?: Record<string, FlagValue>;
+  /** Phase 4.1 — fired-events history (optional for v1 backward-compat). */
+  story?: { fireHistory: string[] };
 }
 
 export interface SaveListResult {
@@ -330,5 +337,103 @@ export async function deleteSave(
   return fetchJSON<{ slotId: string; deleted: true }>(
     `/save/${encodeURIComponent(slotId)}`,
     { method: 'DELETE', signal: opts.signal },
+  );
+}
+
+// ---- Phase 4.1 Story Events (FR-006) --------------------------------------
+
+export type EventTrigger =
+  | { type: 'ON_START' }
+  | { type: 'ON_LOCATION_ENTER'; locationId: string }
+  | { type: 'ON_FLAG'; flag: string; value?: FlagValue }
+  | {
+      type: 'ON_TIME';
+      hourStart: number;
+      hourEnd: number;
+      dayOfWeek?: 'MON' | 'TUE' | 'WED' | 'THU' | 'FRI' | 'SAT' | 'SUN';
+    }
+  | { type: 'ON_AFFINITY'; npcId: string; threshold: number };
+
+export type EventRequire =
+  | { type: 'FLAG_SET'; flag: string }
+  | { type: 'FLAG_NOT_SET'; flag: string }
+  | { type: 'AFFINITY_GTE'; npcId: string; value: number }
+  | { type: 'AFFINITY_LT'; npcId: string; value: number }
+  | { type: 'TIME_BETWEEN'; hourStart: number; hourEnd: number };
+
+export type APIEventEmotion = APIEmotion;
+
+export type EventStep =
+  | { type: 'narration'; text: string }
+  | { type: 'dialog'; speaker: string; text: string }
+  | { type: 'set_flag'; flag: string; value?: FlagValue }
+  | { type: 'clear_flag'; flag: string }
+  | { type: 'set_affinity'; npcId: string; delta: number }
+  | { type: 'set_emotion'; npcId: string; emotion: APIEventEmotion }
+  | { type: 'teleport_player'; x: number; y: number };
+
+export interface StoryEvent {
+  id: string;
+  title: string;
+  description?: string;
+  trigger: EventTrigger;
+  requires?: EventRequire[];
+  once: boolean;
+  steps: EventStep[];
+}
+
+export interface EventMetadata {
+  id: string;
+  title: string;
+  trigger: EventTrigger;
+  once: boolean;
+  description?: string;
+}
+
+export interface EventListResult {
+  count: number;
+  events: EventMetadata[];
+}
+
+export interface EligibilityState {
+  flags: Record<string, FlagValue>;
+  fireHistory: string[];
+  time: SaveSummary['time'] | null;
+  location: string | null;
+  affinities: Record<string, number>;
+}
+
+export interface EligibilityResult {
+  eligible: boolean;
+  reasons: string[];
+}
+
+export async function listEvents(
+  opts: { signal?: AbortSignal } = {},
+): Promise<EventListResult> {
+  return fetchJSON<EventListResult>('/event', {
+    method: 'GET',
+    signal: opts.signal,
+  });
+}
+
+export async function getEvent(
+  eventId: string,
+  opts: { signal?: AbortSignal } = {},
+): Promise<StoryEvent> {
+  return fetchJSON<StoryEvent>(`/event/${encodeURIComponent(eventId)}`, {
+    method: 'GET',
+    signal: opts.signal,
+  });
+}
+
+export async function checkEventEligible(
+  eventId: string,
+  state: EligibilityState,
+  opts: { signal?: AbortSignal } = {},
+): Promise<EligibilityResult> {
+  return fetchJSON<EligibilityResult>(
+    `/event/${encodeURIComponent(eventId)}/eligible`,
+    { method: 'POST', body: state, signal: opts.signal },
   );
 }

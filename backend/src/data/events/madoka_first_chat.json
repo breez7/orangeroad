@@ -1,0 +1,37 @@
+{
+  "id": "madoka_first_chat",
+  "title": "마도카와의 첫 대화",
+  "description": "인트로 이후 마도카에 대한 호감도가 어느 정도 쌓이면 발생하는 짧은 회상 장면.",
+  "trigger": {
+    "type": "ON_AFFINITY",
+    "npcId": "madoka",
+    "threshold": 60
+  },
+  "requires": [
+    { "type": "FLAG_SET", "flag": "intro_complete" },
+    { "type": "FLAG_NOT_SET", "flag": "madoka_first_chat_done" },
+    { "type": "AFFINITY_GTE", "npcId": "madoka", "value": 60 }
+  ],
+  "once": true,
+  "steps": [
+    {
+      "type": "narration",
+      "text": "마도카와 함께 보내는 시간이 늘어나면서, 쿄우스케는 자기도 모르게 그녀의 표정을 살피게 된다."
+    },
+    {
+      "type": "dialog",
+      "speaker": "madoka",
+      "text": "...뭘 그렇게 빤히 봐?\n바보 같이."
+    },
+    {
+      "type": "set_emotion",
+      "npcId": "madoka",
+      "emotion": "flirty"
+    },
+    {
+      "type": "set_flag",
+      "flag": "madoka_first_chat_done",
+      "value": true
+    }
+  ]
+}

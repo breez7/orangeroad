@@ -8,6 +8,8 @@ import { MovementSystem } from '@/systems/MovementSystem';
 import { DialogSystem } from '@/systems/DialogSystem';
 import { TimeSystem } from '@/systems/TimeSystem';
 import { SaveSystem } from '@/systems/SaveSystem';
+import { StorySystem } from '@/systems/StorySystem';
+import { findLocationAt } from '@/data/locations';
 import { useGameStore } from '@/store/gameStore';
 
 export class GameScene {
@@ -24,6 +26,8 @@ export class GameScene {
   readonly time: TimeSystem;
   /** Phase 3.2 — save/load orchestration (FR-008). */
   readonly save: SaveSystem;
+  /** Phase 4.1 — scripted story event playback (FR-006). */
+  readonly story: StorySystem;
   private readonly locations: Location[] = [];
   private readonly movement: MovementSystem;
   private readonly npcLayer: Container;
@@ -98,16 +102,26 @@ export class GameScene {
       entityManager: this.entityManager,
     });
 
+    // Phase 4.1 — story system. Subscribes to the store + drives event
+    // playback. boot() runs the ON_START pass async so an unstarted intro
+    // fires after the scene is on screen.
+    this.story = new StorySystem({
+      player: this.player,
+      timeSystem: this.time,
+    });
+    void this.story.boot();
+
     // Click-to-walk system. Bind events on the scene root so empty grass
     // between location tiles still registers clicks. The dialog system gets
-    // first crack at every click; movement ignores input while dialog is open.
+    // first crack at every click; movement ignores input while dialog OR a
+    // scripted story event is open.
     this.movement = new MovementSystem({
       townRoot: this.root,
       player: this.player,
       bounds: TOWN_BOUNDS,
       locations: LOCATIONS,
       onClickIntercept: (lx, ly) => this.dialog.tryOpenAtPoint(lx, ly),
-      isInputBlocked: () => this.dialog.isOpen,
+      isInputBlocked: () => this.dialog.isOpen || this.story.isEventActive,
     });
     this.movement.attach();
 
@@ -134,12 +148,22 @@ export class GameScene {
     this.entityManager.update(dt);
     // Tick the clock. Internally this only mutates the store on game-minute
     // boundaries (default: ~once per real-second), not every frame.
+    // TimeSystem.pause() (called by StorySystem during scripted playback)
+    // makes update() a no-op while a story event is playing.
     this.time.update(dt);
     if (this.player.isMoving) {
-      useGameStore.getState().setPlayerPosition({
-        x: this.player.x,
-        y: this.player.y,
-      });
+      const px = this.player.x;
+      const py = this.player.y;
+      const store = useGameStore.getState();
+      store.setPlayerPosition({ x: px, y: py });
+      // Phase 4.1 — keep the coarse player-location id fresh so the
+      // StorySystem's ON_LOCATION_ENTER trigger has something to evaluate
+      // against. Soft-snapping pushes the player out of building rects most
+      // of the time, so this is usually null while moving.
+      const loc = findLocationAt(px, py);
+      if (loc !== store.playerLocationId) {
+        store.setPlayerLocationId(loc);
+      }
     }
   }
 
@@ -159,6 +183,11 @@ export class GameScene {
     // before tearing down entities so the system's references stay valid
     // until its destroy() returns.
     this.dialog.destroy();
+    // Phase 4.1 — also tear down the story system (unsubscribes from store +
+    // aborts any in-flight event fetch). Active scripted state in the store
+    // is intentionally NOT cleared here so a save written mid-event can
+    // resume on next load (Phase 4.x).
+    this.story.destroy();
     useGameStore.getState().closeDialog();
     // Tear down NPCs before the parent container goes away so each NPC's
     // own destroy() runs (StrictMode-safe re-init).

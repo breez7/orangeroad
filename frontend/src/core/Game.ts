@@ -2,6 +2,7 @@ import { Application, Ticker } from 'pixi.js';
 import { GameScene } from '@/scenes/GameScene';
 import type { DialogSystem } from '@/systems/DialogSystem';
 import type { SaveSystem } from '@/systems/SaveSystem';
+import type { StorySystem } from '@/systems/StorySystem';
 
 export class Game {
   private app: Application | null = null;
@@ -23,6 +24,11 @@ export class Game {
   /** Phase 3.2 — accessor for the save system on the active scene (FR-008). */
   get saveSystem(): SaveSystem | null {
     return this.scene?.save ?? null;
+  }
+
+  /** Phase 4.1 — accessor for the story system on the active scene (FR-006). */
+  get storySystem(): StorySystem | null {
+    return this.scene?.story ?? null;
   }
 
   async init(host: HTMLElement): Promise<void> {

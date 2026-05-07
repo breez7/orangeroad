@@ -65,6 +65,10 @@ const npcEntrySchema = z.object({
  * Phase 3.3 note: `relationships` is OPTIONAL on v1 so existing v1 saves from
  * Phase 3.2 still load cleanly. New saves include the field; the loader on
  * the frontend defaults missing entries to `{ affinity: 50, emotion: 'neutral' }`.
+ *
+ * Phase 4.1 note: `flags` and `story` are also optional on v1 so saves written
+ * before the story system existed keep loading. Missing slices default to
+ * empty (no flags set, no events fired).
  */
 export const gameSaveV1Schema = z.object({
   version: z.literal(1),
@@ -84,6 +88,23 @@ export const gameSaveV1Schema = z.object({
    * with v1 saves written before this phase.
    */
   relationships: z.record(z.string(), relationshipDataSchema).optional(),
+  /**
+   * Phase 4.1 — story flags. Open value type so authors can use booleans,
+   * counters, or short strings as needed. Optional for backward-compat.
+   */
+  flags: z
+    .record(z.string(), z.union([z.boolean(), z.string(), z.number()]))
+    .optional(),
+  /**
+   * Phase 4.1 — fired-events history (event ids that have already played
+   * for this save; used to gate `once: true` events). Optional for v1
+   * backward-compat.
+   */
+  story: z
+    .object({
+      fireHistory: z.array(z.string().min(1).max(64)).max(1024),
+    })
+    .optional(),
 });
 
 export type GameSaveV1 = z.infer<typeof gameSaveV1Schema>;

@@ -1,9 +1,10 @@
-import { useEffect, useRef, useCallback, useState } from 'react';
+import { useEffect, useRef, useCallback, useMemo, useState } from 'react';
 import { Game } from '@/core/Game';
 import { useGameStore } from '@/store/gameStore';
 import { DialogBox } from '@/ui/components/DialogBox';
 import { TimeDisplay } from '@/ui/components/TimeDisplay';
 import { SaveSlotsPanel } from '@/ui/components/SaveSlotsPanel';
+import { StoryOverlay } from '@/ui/components/StoryOverlay';
 
 function App() {
   const phase = useGameStore((s) => s.phase);
@@ -69,6 +70,22 @@ function App() {
   const handleOpenSave = useCallback(() => setSaveOpen(true), []);
   const handleCloseSave = useCallback(() => setSaveOpen(false), []);
 
+  // Phase 4.1 — StoryOverlay needs the npc-id → display-name map to render
+  // the speaker label for `dialog` steps. Memoised against the npcs slice
+  // so the overlay only re-renders when names change (rare).
+  const npcNames = useGameStore((s) => s.npcs);
+  const speakerNameMap = useMemo(() => {
+    const out: Record<string, string> = {};
+    for (const [id, npc] of Object.entries(npcNames)) out[id] = npc.name;
+    return out;
+  }, [npcNames]);
+
+  const handleStoryConfirm = useCallback(() => {
+    const story = gameRef.current?.storySystem;
+    if (!story) return;
+    void story.confirmStep();
+  }, []);
+
   return (
     <div className="game-container">
       <div ref={hostRef} className="game-canvas" />
@@ -114,6 +131,11 @@ function App() {
           saveSystem={gameRef.current?.saveSystem ?? null}
           onClose={handleCloseSave}
         />
+
+        {/* Phase 4.1 — story event overlay (FR-006). Rendered ABOVE the
+            DialogBox so a scripted scene can never be hidden behind a
+            stray AI-dialog window. */}
+        <StoryOverlay npcNames={speakerNameMap} onConfirm={handleStoryConfirm} />
       </div>
     </div>
   );

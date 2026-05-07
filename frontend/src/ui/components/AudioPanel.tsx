@@ -186,6 +186,7 @@ export function AudioPanel() {
                 type="button"
                 onClick={() => setOpen(false)}
                 className="btn-game text-sm"
+                aria-label="사운드 설정 닫기"
                 data-testid="audio-close"
               >
                 닫기

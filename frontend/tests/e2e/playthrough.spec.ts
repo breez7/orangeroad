@@ -42,8 +42,9 @@ interface PlaythroughCtx {
  */
 const ALLOWED_WARN_PREFIXES = [
   // AudioContext can't start until the user has interacted; in headless
-  // chromium with no real gesture this is a normal early state.
+  // chromium with no real gesture either of these two warns may fire.
   '[AudioEngine] Web Audio API not available',
+  '[AudioEngine] failed to construct AudioContext',
 ];
 
 /** Console-warn allowlist by substring — WebGL driver chatter etc. */

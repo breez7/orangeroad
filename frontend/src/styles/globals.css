@@ -38,6 +38,12 @@
   --color-primary-dark: #e85d04;
   --color-secondary: #f7931e;
 
+  /* Phase B-3 (#22) — warm accent used for the Doukyusei-style dialog
+     gradient + portrait frame. Stored as channels so we can compose it
+     with `rgb(var(--accent-warm) / <alpha>)` patterns in utility classes. */
+  --accent-warm: 251 175 86;       /* #fbaf56 — soft amber */
+  --accent-warm-deep: 213 102 41;  /* #d56629 — burnt orange */
+
   /* Accent (cool complement). Reused as focus-ring color so it's visible
      on top of any orange-tinted panel. */
   --color-accent: #5eafc5;
@@ -136,12 +142,12 @@
 
   /*
    * Dialog box — anchored bottom of the viewport. On small screens it
-   * spans the full width; on desktop it's capped at ~640px so a wide
-   * monitor doesn't stretch the chat into a cinematic letterbox.
+   * spans the full width; on desktop it's capped wider in Phase B-3 to
+   * accommodate the new 140px portrait column without crowding the chat.
    */
   .dialog-box {
     @apply absolute pointer-events-auto p-4 animate-fade-in;
-    @apply panel-glass;
+    @apply dialog-frame;
     left: 0.75rem;
     right: 0.75rem;
     bottom: 0.75rem;
@@ -152,7 +158,9 @@
       left: 50%;
       right: auto;
       bottom: 1.25rem;
-      width: min(640px, calc(100vw - 2rem));
+      /* Phase B-3 — wider so the portrait + chat live side-by-side
+         comfortably. Capped at 760px on huge monitors. */
+      width: min(760px, calc(100vw - 2rem));
       transform: translateX(-50%);
     }
 
@@ -160,6 +168,87 @@
     .dialog-box.animate-slide-up {
       animation-name: slide-up-centered;
     }
+  }
+
+  /*
+   * Phase B-3 (#22) — Doukyusei-inspired dialog frame. A wider rounded
+   * card with a soft orange-tinted gradient and a warmer outer ring than
+   * the generic `panel-glass`, used on the dialog box and the story
+   * overlay so the two feel like a coordinated pair.
+   */
+  .dialog-frame {
+    background:
+      linear-gradient(
+        145deg,
+        rgba(var(--accent-warm) / 0.18) 0%,
+        rgba(30, 41, 59, 0.92) 38%,
+        rgba(15, 23, 42, 0.95) 100%
+      );
+    border: 1px solid rgba(var(--accent-warm) / 0.55);
+    border-radius: 1rem;
+    box-shadow:
+      0 18px 40px -16px rgba(0, 0, 0, 0.65),
+      0 0 0 1px rgba(var(--accent-warm) / 0.12) inset;
+    backdrop-filter: blur(10px) saturate(150%);
+    -webkit-backdrop-filter: blur(10px) saturate(150%);
+    color: var(--color-text);
+  }
+
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .dialog-frame {
+      background:
+        linear-gradient(
+          145deg,
+          rgba(var(--accent-warm-deep) / 0.32) 0%,
+          rgba(30, 41, 59, 0.97) 40%,
+          rgba(15, 23, 42, 0.98) 100%
+        );
+    }
+  }
+
+  /*
+   * Phase B-3 — chat bubble with a small CSS triangle "tail" pointing back
+   * toward the speaker. `.chat-bubble-them` tail points left (assistant on
+   * the left); `.chat-bubble-me` tail points right (player on the right).
+   * Implemented with `::after` so the tail color tracks the bubble color
+   * via `currentColor`-style inheritance through the same Tailwind class.
+   */
+  .chat-bubble-them,
+  .chat-bubble-me {
+    position: relative;
+  }
+
+  .chat-bubble-them::after {
+    content: '';
+    position: absolute;
+    bottom: 4px;
+    left: -5px;
+    width: 0;
+    height: 0;
+    border-style: solid;
+    border-width: 6px 6px 0 0;
+    /* Inherits the bubble's background color via the `--bubble-bg` CSS var
+       set inline by the React side for each variant. */
+    border-color: var(--bubble-bg, #374151) transparent transparent transparent;
+  }
+
+  .chat-bubble-me::after {
+    content: '';
+    position: absolute;
+    bottom: 4px;
+    right: -5px;
+    width: 0;
+    height: 0;
+    border-style: solid;
+    border-width: 6px 0 0 6px;
+    border-color: var(--bubble-bg, #ff6b35) transparent transparent transparent;
+  }
+
+  /* Phase B-3 — slightly looser line-height for Korean glyph stacks where
+     the default 1.4 reads cramped at small sizes. */
+  .text-ko {
+    line-height: 1.55;
+    word-break: keep-all;
   }
 
   /* Status panel — top-left card on desktop, condensed header on mobile. */

@@ -3,6 +3,7 @@ import type { SaveSummary } from '@/api/client';
 import { APIError } from '@/api/client';
 import type { SaveSystem } from '@/systems/SaveSystem';
 import { SaveError } from '@/systems/SaveSystem';
+import { useToast } from '@/ui/components/Toast';
 
 /**
  * SaveSlotsPanel (Phase 3.2 — FR-008).
@@ -24,10 +25,9 @@ import { SaveError } from '@/systems/SaveSystem';
 
 const FIXED_SLOTS = ['slot1', 'slot2', 'slot3'] as const;
 
-type Status =
-  | { kind: 'idle' }
-  | { kind: 'success'; message: string }
-  | { kind: 'error'; message: string };
+// Inline status now only carries list-fetch errors (per-action success /
+// error feedback flows through the toast system in Phase 5.1).
+type Status = { kind: 'idle' } | { kind: 'error'; message: string };
 
 const DAY_OF_WEEK_KO: Record<SaveSummary['time']['dayOfWeek'], string> = {
   MON: '월',
@@ -86,9 +86,17 @@ export interface SaveSlotsPanelProps {
 }
 
 export function SaveSlotsPanel({ open, saveSystem, onClose }: SaveSlotsPanelProps) {
+  const toast = useToast();
   const [slots, setSlots] = useState<SaveSummary[]>([]);
+  // `busyAction` distinguishes save / load / delete so the corresponding
+  // button can show a per-action spinner instead of all three going dim.
   const [busySlot, setBusySlot] = useState<string | null>(null);
+  const [busyAction, setBusyAction] = useState<'save' | 'load' | 'delete' | null>(null);
   const [listLoading, setListLoading] = useState(false);
+  // Local status is now reserved for transient list-fetch errors (the
+  // panel can't toast something for an issue it surfaces inline at the
+  // top); per-action success/failure goes through the toast system so
+  // the user sees feedback even after closing the panel.
   const [status, setStatus] = useState<Status>({ kind: 'idle' });
 
   // Refresh the slot list whenever the panel opens or after a mutation.
@@ -154,35 +162,42 @@ export function SaveSlotsPanel({ open, saveSystem, onClose }: SaveSlotsPanelProp
     async (slotId: string) => {
       if (!saveSystem) return;
       setBusySlot(slotId);
+      setBusyAction('save');
       setStatus({ kind: 'idle' });
       try {
         await saveSystem.save(slotId);
-        setStatus({ kind: 'success', message: `${slotId}에 저장했습니다.` });
+        toast.success(`${slotId}에 저장했습니다.`);
         refresh();
       } catch (err) {
-        setStatus({ kind: 'error', message: errorMessage(err) });
+        toast.error(errorMessage(err));
       } finally {
         setBusySlot(null);
+        setBusyAction(null);
       }
     },
-    [saveSystem, refresh],
+    [saveSystem, refresh, toast],
   );
 
   const handleLoad = useCallback(
     async (slotId: string) => {
       if (!saveSystem) return;
       setBusySlot(slotId);
+      setBusyAction('load');
       setStatus({ kind: 'idle' });
       try {
         await saveSystem.load(slotId);
-        setStatus({ kind: 'success', message: `${slotId}에서 불러왔습니다.` });
+        toast.success(`${slotId}에서 불러왔습니다.`);
+        // Auto-close on successful load so the player sees the restored
+        // game state instead of staying behind the modal.
+        onClose();
       } catch (err) {
-        setStatus({ kind: 'error', message: errorMessage(err) });
+        toast.error(errorMessage(err));
       } finally {
         setBusySlot(null);
+        setBusyAction(null);
       }
     },
-    [saveSystem],
+    [saveSystem, toast, onClose],
   );
 
   const handleDelete = useCallback(
@@ -191,25 +206,27 @@ export function SaveSlotsPanel({ open, saveSystem, onClose }: SaveSlotsPanelProp
       // Avoid window.confirm during dialog interactions — friends-only
       // deployment, low risk if mis-clicked, and undoable by re-saving.
       setBusySlot(slotId);
+      setBusyAction('delete');
       setStatus({ kind: 'idle' });
       try {
         await saveSystem.delete(slotId);
-        setStatus({ kind: 'success', message: `${slotId}을(를) 삭제했습니다.` });
+        toast.success(`${slotId}을(를) 삭제했습니다.`);
         refresh();
       } catch (err) {
-        setStatus({ kind: 'error', message: errorMessage(err) });
+        toast.error(errorMessage(err));
       } finally {
         setBusySlot(null);
+        setBusyAction(null);
       }
     },
-    [saveSystem, refresh],
+    [saveSystem, refresh, toast],
   );
 
   if (!open) return null;
 
   return (
     <div
-      className="absolute inset-0 flex items-center justify-center bg-black/50 pointer-events-auto"
+      className="absolute inset-0 flex sm:items-center sm:justify-center items-stretch justify-stretch bg-black/60 pointer-events-auto animate-fade-in"
       role="dialog"
       aria-modal="true"
       aria-label="세이브 슬롯"
@@ -220,32 +237,25 @@ export function SaveSlotsPanel({ open, saveSystem, onClose }: SaveSlotsPanelProp
       }}
     >
       <div
-        className="bg-gray-800/95 border-2 border-orange-primary rounded-lg shadow-2xl backdrop-blur-sm p-5 w-full max-w-lg mx-4"
+        className="panel sm:max-w-lg sm:mx-4 sm:rounded-lg w-full sm:w-auto p-5 flex flex-col sm:max-h-[85vh] max-h-screen sm:my-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center justify-between mb-3 shrink-0">
           <h2 className="text-lg font-bold text-orange-primary">세이브 / 로드</h2>
           <button
             type="button"
             onClick={onClose}
-            className="text-gray-300 hover:text-white text-xl leading-none px-2"
+            className="btn-icon"
             aria-label="닫기"
           >
-            ×
+            <span aria-hidden>×</span>
           </button>
         </div>
 
-        {status.kind === 'success' && (
-          <div
-            className="mb-3 px-3 py-2 rounded bg-green-900/60 border border-green-500 text-green-100 text-xs"
-            role="status"
-          >
-            {status.message}
-          </div>
-        )}
+        {/* List-fetch error stays inline — toast would lose context. */}
         {status.kind === 'error' && (
           <div
-            className="mb-3 px-3 py-2 rounded bg-red-900/60 border border-red-500 text-red-100 text-xs"
+            className="mb-3 px-3 py-2 rounded bg-red-900/60 border border-red-500 text-red-100 text-xs animate-shake"
             role="alert"
           >
             {status.message}
@@ -253,17 +263,20 @@ export function SaveSlotsPanel({ open, saveSystem, onClose }: SaveSlotsPanelProp
         )}
 
         {listLoading && (
-          <p className="text-xs text-gray-400 mb-2">슬롯 목록 불러오는 중...</p>
+          <p className="text-xs text-gray-400 mb-2 flex items-center gap-2">
+            <span className="inline-block w-3 h-3 spinner" aria-hidden />
+            슬롯 목록 불러오는 중...
+          </p>
         )}
 
-        <ul className="space-y-2 max-h-[60vh] overflow-y-auto pr-1">
+        <ul className="space-y-2 overflow-y-auto pr-1 flex-1">
           {rows.map((row) => {
             const isBusy = busySlot === row.slotId;
             const summary = row.summary;
             return (
               <li
                 key={row.slotId}
-                className="bg-gray-900/60 border border-gray-700 rounded p-3 flex flex-col gap-2"
+                className="bg-gray-900/60 border border-gray-700 rounded p-3 flex flex-col gap-2 animate-fade-in"
               >
                 <div className="flex items-center justify-between">
                   <span className="font-semibold text-gray-100">{row.slotId}</span>
@@ -283,25 +296,34 @@ export function SaveSlotsPanel({ open, saveSystem, onClose }: SaveSlotsPanelProp
                     type="button"
                     onClick={() => handleSave(row.slotId)}
                     disabled={isBusy || !saveSystem}
-                    className="btn-game text-sm px-3 py-1"
+                    className="btn-game text-sm px-3 py-1 inline-flex items-center gap-1.5"
+                    aria-label={`${row.slotId}에 저장`}
                   >
-                    {isBusy ? '저장 중...' : '저장'}
+                    {isBusy && busyAction === 'save' && (
+                      <span className="inline-block w-3 h-3 spinner" aria-hidden />
+                    )}
+                    {isBusy && busyAction === 'save' ? '저장 중...' : '저장'}
                   </button>
                   <button
                     type="button"
                     onClick={() => handleLoad(row.slotId)}
                     disabled={isBusy || !saveSystem || !summary}
-                    className="btn-game text-sm px-3 py-1"
+                    className="btn-game text-sm px-3 py-1 inline-flex items-center gap-1.5"
+                    aria-label={`${row.slotId} 불러오기`}
                   >
-                    {isBusy ? '불러오는 중...' : '불러오기'}
+                    {isBusy && busyAction === 'load' && (
+                      <span className="inline-block w-3 h-3 spinner" aria-hidden />
+                    )}
+                    {isBusy && busyAction === 'load' ? '불러오는 중...' : '불러오기'}
                   </button>
                   <button
                     type="button"
                     onClick={() => handleDelete(row.slotId)}
                     disabled={isBusy || !saveSystem || !summary}
-                    className="btn-game text-sm px-3 py-1"
+                    className="btn-game-ghost text-sm"
+                    aria-label={`${row.slotId} 삭제`}
                   >
-                    삭제
+                    {isBusy && busyAction === 'delete' ? '삭제 중...' : '삭제'}
                   </button>
                 </div>
               </li>

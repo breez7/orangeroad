@@ -78,14 +78,20 @@ export function TimeDisplay() {
       aria-live="polite"
       aria-label={`Day ${day}, ${pad2(hour)}시 ${pad2(minute)}분, ${weekdayLabel}, ${phaseLabel}, 일과: ${activityHint}`}
     >
-      <p className="text-xs text-gray-300 leading-tight">Day {day}</p>
-      <p className="text-2xl font-bold text-orange-primary leading-tight font-mono tracking-wider">
+      {/*
+        Phase 5.1 — responsive condensation. On phones (<sm) we drop the
+        Day counter row and the activity hint into a single inline strip
+        so the chip stays out of the way; on tablets+ the full HUD shows.
+      */}
+      <p className="hidden sm:block text-xs text-gray-300 leading-tight">Day {day}</p>
+      <p className="text-lg sm:text-2xl font-bold text-orange-primary leading-tight font-mono tracking-wider">
         {pad2(hour)}:{pad2(minute)}
       </p>
-      <p className="text-xs text-gray-200 leading-tight mt-0.5">
+      <p className="text-[11px] sm:text-xs text-gray-200 leading-tight mt-0.5">
+        <span className="sm:hidden">D{day} · </span>
         {weekdayLabel} · {phaseDisplay}
       </p>
-      <p className="text-xs text-orange-secondary leading-tight mt-0.5 italic">
+      <p className="hidden sm:block text-xs text-orange-secondary leading-tight mt-0.5 italic">
         쿄우스케 일과: {activityHint}
       </p>
     </div>

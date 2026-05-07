@@ -5,6 +5,8 @@ import { DialogBox } from '@/ui/components/DialogBox';
 import { TimeDisplay } from '@/ui/components/TimeDisplay';
 import { SaveSlotsPanel } from '@/ui/components/SaveSlotsPanel';
 import { StoryOverlay } from '@/ui/components/StoryOverlay';
+import { HelpPanel } from '@/ui/components/HelpPanel';
+import { ToastContainer } from '@/ui/components/Toast';
 
 function App() {
   const phase = useGameStore((s) => s.phase);
@@ -39,6 +41,29 @@ function App() {
   // Phase 3.2 — save panel toggle. The SaveSystem itself is owned by
   // GameScene; the panel reads it lazily through gameRef when opened.
   const [saveOpen, setSaveOpen] = useState(false);
+
+  // Phase 5.1 — collapse the verbose status-panel details on narrow screens.
+  // Track viewport width via a single matchMedia listener so the layout
+  // reflows without re-rendering on every resize tick.
+  const [isNarrow, setIsNarrow] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return window.matchMedia('(max-width: 639px)').matches;
+  });
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const mq = window.matchMedia('(max-width: 639px)');
+    const handler = (e: MediaQueryListEvent) => setIsNarrow(e.matches);
+    // Both `addEventListener` and the legacy `addListener` exist; modern
+    // browsers prefer the former. The cast keeps TS strict happy without
+    // pulling in lib.dom updates.
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+
+  // On narrow screens default to "collapsed" — the user can tap the
+  // chevron to expand the verbose details if they want them.
+  const [statusExpanded, setStatusExpanded] = useState<boolean>(false);
+  const showStatusDetails = !isNarrow || statusExpanded;
 
   useEffect(() => {
     const host = hostRef.current;
@@ -91,21 +116,58 @@ function App() {
       <div ref={hostRef} className="game-canvas" />
       <div className="ui-overlay">
         <div className="status-panel ui-interactive">
-          <h2 className="text-lg font-bold text-orange-primary">Orange Road</h2>
-          <p className="text-sm text-gray-300">
-            Phase {phase} — Click NPC to talk
-          </p>
-          <p className="text-xs text-green-400 mt-1">
-            Player: ({Math.round(playerPosition.x)}, {Math.round(playerPosition.y)})
-          </p>
-          <p className="text-xs text-blue-300 mt-1">NPCs: {npcCount}</p>
-          <button
-            type="button"
-            onClick={handleOpenSave}
-            className="btn-game text-xs px-3 py-1 mt-2"
-          >
-            세이브 / 로드
-          </button>
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <h2 className="text-base sm:text-lg font-bold text-orange-primary leading-tight">
+                Orange Road
+              </h2>
+              {showStatusDetails && (
+                <p className="text-xs sm:text-sm text-gray-300 leading-snug animate-fade-in">
+                  Phase {phase} — NPC를 클릭해 대화하세요
+                </p>
+              )}
+            </div>
+            {isNarrow && (
+              <button
+                type="button"
+                onClick={() => setStatusExpanded((v) => !v)}
+                className="btn-icon shrink-0"
+                aria-label={statusExpanded ? '상세 정보 접기' : '상세 정보 펼치기'}
+                aria-expanded={statusExpanded}
+              >
+                <span aria-hidden className="text-orange-secondary text-base">
+                  {statusExpanded ? '▾' : '▸'}
+                </span>
+              </button>
+            )}
+          </div>
+
+          {showStatusDetails && (
+            <div className="mt-1 space-y-0.5 animate-fade-in">
+              <p className="text-xs text-green-400">
+                Player: ({Math.round(playerPosition.x)}, {Math.round(playerPosition.y)})
+              </p>
+              <p className="text-xs text-blue-300">NPCs: {npcCount}</p>
+              <button
+                type="button"
+                onClick={handleOpenSave}
+                className="btn-game text-xs px-3 py-1 mt-2"
+              >
+                세이브 / 로드
+              </button>
+            </div>
+          )}
+
+          {!showStatusDetails && (
+            <button
+              type="button"
+              onClick={handleOpenSave}
+              className="btn-game-ghost text-xs px-2 py-0.5 mt-1"
+              aria-label="세이브 / 로드 열기"
+            >
+              저장
+            </button>
+          )}
         </div>
 
         {/* Phase 3.1 — top-right clock HUD (FR-004). */}
@@ -136,7 +198,15 @@ function App() {
             DialogBox so a scripted scene can never be hidden behind a
             stray AI-dialog window. */}
         <StoryOverlay npcNames={speakerNameMap} onConfirm={handleStoryConfirm} />
+
+        {/* Phase 5.1 — UX affordances. */}
+        <HelpPanel />
       </div>
+
+      {/* Toasts live outside `.ui-overlay` so they aren't constrained by its
+          pointer-events: none rule (toast container handles its own pointer
+          policy). */}
+      <ToastContainer />
     </div>
   );
 }

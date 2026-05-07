@@ -57,8 +57,8 @@ export function AffinityIndicator({ affinity, emotion }: AffinityIndicatorProps)
           aria-label="호감도"
         >
           <div
-            className={`h-full ${affinityColor(clamped)} transition-all duration-300`}
-            style={{ width: widthPct }}
+            className={`h-full ${affinityColor(clamped)}`}
+            style={{ width: widthPct, transition: 'width 400ms ease-out, background-color 300ms ease-out' }}
           />
         </div>
         <span className="text-gray-300 tabular-nums w-7 text-right">{clamped}</span>

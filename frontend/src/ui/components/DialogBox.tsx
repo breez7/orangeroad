@@ -122,18 +122,19 @@ export function DialogBox({
         <button
           type="button"
           onClick={onClose}
-          className="text-gray-300 hover:text-white text-xl leading-none px-2"
+          className="btn-icon"
           aria-label="대화 닫기"
         >
-          ×
+          <span aria-hidden>×</span>
         </button>
       </div>
 
-      {/* Error banner */}
+      {/* Error banner — small shake animation on appearance to draw the eye. */}
       {error && (
         <div
-          className="mb-2 px-3 py-2 rounded bg-red-900/60 border border-red-500 text-red-100 text-xs"
+          className="mb-2 px-3 py-2 rounded bg-red-900/60 border border-red-500 text-red-100 text-xs animate-shake"
           role="alert"
+          aria-live="assertive"
         >
           {error}
         </div>
@@ -145,7 +146,7 @@ export function DialogBox({
         className="bg-gray-900/60 rounded p-2 mb-2 h-40 overflow-y-auto text-sm space-y-1.5"
       >
         {history.length === 0 && !isWaiting && (
-          <p className="text-gray-400 text-xs italic">
+          <p className="text-gray-400 text-xs italic animate-fade-in">
             {npcName ?? '상대'}에게 말을 걸어보세요...
           </p>
         )}
@@ -155,7 +156,7 @@ export function DialogBox({
           <DialogTurn key={`${entry.ts ?? idx}-${idx}`} entry={entry} />
         ))}
         {isWaiting && (
-          <div className="flex items-center gap-2 text-gray-300 text-xs">
+          <div className="flex items-center gap-2 text-gray-300 text-xs animate-fade-in">
             <span className="inline-block w-3 h-3 spinner" aria-hidden />
             <span>{npcName ?? 'NPC'}이(가) 답변 중...</span>
           </div>
@@ -173,13 +174,15 @@ export function DialogBox({
           disabled={isWaiting}
           maxLength={2000}
           placeholder="메시지를 입력하세요..."
-          className="flex-1 px-3 py-2 rounded bg-gray-700 text-white placeholder-gray-400 border border-gray-600 focus:outline-none focus:border-orange-primary disabled:opacity-50"
+          aria-label="대화 입력"
+          className="flex-1 px-3 py-2 rounded bg-gray-700 text-white placeholder-gray-400 border border-gray-600 focus:outline-none focus:border-orange-primary focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-50"
         />
         <button
           type="button"
           onClick={handleSend}
           disabled={isWaiting || inputValue.trim().length === 0}
           className="btn-game"
+          aria-label="전송"
         >
           전송
         </button>
@@ -188,16 +191,23 @@ export function DialogBox({
   );
 }
 
-/** Single chat bubble — user (right, orange) vs assistant (left, gray). */
+/**
+ * Single chat bubble — user (right, orange) vs assistant (left, gray).
+ *
+ * Phase 5.1: each bubble fades+slides in via `animate-fade-in` + a small
+ * translateY tween so a fresh assistant reply doesn't snap into place. The
+ * scroll-pin in the parent's effect runs after layout, so the animation
+ * doesn't fight the auto-scroll.
+ */
 function DialogTurn({ entry }: { entry: DialogHistoryEntry }) {
   const isUser = entry.role === 'user';
   return (
-    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
+    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} animate-fade-in`}>
       <div
         className={
           isUser
-            ? 'max-w-[75%] px-3 py-1.5 rounded-lg rounded-br-sm bg-orange-primary text-white text-sm whitespace-pre-wrap break-words'
-            : 'max-w-[75%] px-3 py-1.5 rounded-lg rounded-bl-sm bg-gray-700 text-gray-100 text-sm whitespace-pre-wrap break-words'
+            ? 'max-w-[75%] px-3 py-1.5 rounded-lg rounded-br-sm bg-orange-primary text-white text-sm whitespace-pre-wrap break-words shadow-md'
+            : 'max-w-[75%] px-3 py-1.5 rounded-lg rounded-bl-sm bg-gray-700 text-gray-100 text-sm whitespace-pre-wrap break-words shadow-md'
         }
       >
         {entry.content}

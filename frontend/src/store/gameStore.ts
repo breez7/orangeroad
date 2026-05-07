@@ -246,7 +246,7 @@ const initialStory: StorySlice = {
 };
 
 export const useGameStore = create<GameStoreState>((set) => ({
-  phase: '4.2',
+  phase: '5.1',
   currentLocationId: null,
   setCurrentLocation: (id) => set({ currentLocationId: id }),
   playerPosition: { x: 640, y: 360 },

@@ -105,13 +105,17 @@ export function StoryOverlay({ npcNames, onConfirm }: StoryOverlayProps) {
 
   return (
     <div
-      className="absolute inset-x-0 bottom-0 px-4 pb-4 pointer-events-none"
+      className="absolute inset-x-0 bottom-0 px-4 pb-4 pointer-events-none animate-fade-in"
       role="dialog"
       aria-modal="true"
       aria-label="스토리 이벤트"
     >
+      {/* Re-key on activeEventId + stepIndex so each new step remounts the
+          card, replaying the slide+fade animation — a soft cue between
+          narration / dialog frames without doing a fade-out on exit. */}
       <div
-        className="mx-auto max-w-2xl bg-gray-900/95 border-2 border-orange-primary rounded-lg p-4 shadow-xl pointer-events-auto cursor-pointer animate-slide-up"
+        key={`${activeEventId}-${stepIndex}`}
+        className="mx-auto max-w-2xl panel-glass p-4 pointer-events-auto cursor-pointer animate-slide-up"
         onClick={onConfirm}
       >
         {loadError && (

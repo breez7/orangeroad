@@ -2,11 +2,24 @@
 <html lang="ko">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="description" content="Orange Road Simulation Game - 2D 웹 기반 생활/연애 시뮬레이션" />
+    <meta name="theme-color" content="#0f172a" />
     <title>Orange Road - Simulation Game</title>
+    <!--
+      Phase 5.1 — Korean web font.
+      Raspberry Pi OS may ship without a CJK-capable system font; preconnect +
+      load Noto Sans KR (subset 400/600/700) so dialog text renders crisply on
+      every target. preload="fallback" pattern keeps FCP cheap.
+    -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;600;700&display=swap"
+      rel="stylesheet"
+    />
   </head>
-  <body class="bg-gray-900 text-white antialiased">
+  <body class="bg-gray-900 text-white antialiased font-sans">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

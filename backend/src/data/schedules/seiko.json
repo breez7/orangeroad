@@ -1,0 +1,47 @@
+{
+  "id": "seiko",
+  "weekly": [
+    {
+      "days": ["MON", "TUE", "WED", "THU", "FRI"],
+      "fromMinute": 480,
+      "toMinute": 720,
+      "locationId": "school",
+      "activity": "오전 수업"
+    },
+    {
+      "days": ["MON", "TUE", "WED", "THU", "FRI"],
+      "fromMinute": 720,
+      "toMinute": 780,
+      "locationId": "school",
+      "activity": "점심시간"
+    },
+    {
+      "days": ["MON", "TUE", "WED", "THU", "FRI"],
+      "fromMinute": 780,
+      "toMinute": 930,
+      "locationId": "school",
+      "activity": "오후 수업"
+    },
+    {
+      "days": ["MON", "TUE", "WED", "THU", "FRI"],
+      "fromMinute": 930,
+      "toMinute": 1320,
+      "locationId": "cafe",
+      "activity": "방과후 — 카페에서 알바"
+    },
+    {
+      "days": ["SAT", "SUN"],
+      "fromMinute": 600,
+      "toMinute": 1320,
+      "locationId": "cafe",
+      "activity": "주말 — 카페에서 알바"
+    },
+    {
+      "days": ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"],
+      "fromMinute": 1320,
+      "toMinute": 1440,
+      "locationId": "cafe",
+      "activity": "잠"
+    }
+  ]
+}

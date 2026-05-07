@@ -1,0 +1,47 @@
+{
+  "id": "masumi",
+  "weekly": [
+    {
+      "days": ["MON", "TUE", "WED", "THU", "FRI"],
+      "fromMinute": 480,
+      "toMinute": 720,
+      "locationId": "school",
+      "activity": "오전 수업"
+    },
+    {
+      "days": ["MON", "TUE", "WED", "THU", "FRI"],
+      "fromMinute": 720,
+      "toMinute": 780,
+      "locationId": "school",
+      "activity": "점심시간"
+    },
+    {
+      "days": ["MON", "TUE", "WED", "THU", "FRI"],
+      "fromMinute": 780,
+      "toMinute": 930,
+      "locationId": "school",
+      "activity": "오후 수업"
+    },
+    {
+      "days": ["MON", "TUE", "WED", "THU", "FRI"],
+      "fromMinute": 930,
+      "toMinute": 1320,
+      "locationId": "park",
+      "activity": "방과후 — 공원"
+    },
+    {
+      "days": ["SAT", "SUN"],
+      "fromMinute": 600,
+      "toMinute": 1320,
+      "locationId": "park",
+      "activity": "주말 — 공원에서 휴식"
+    },
+    {
+      "days": ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"],
+      "fromMinute": 1320,
+      "toMinute": 1440,
+      "locationId": "park",
+      "activity": "잠"
+    }
+  ]
+}

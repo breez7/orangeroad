@@ -169,6 +169,27 @@ interface GameStoreState {
    */
   playerLocationId: string | null;
   setPlayerLocationId: (id: string | null) => void;
+
+  /**
+   * Phase 4.2 — per-NPC current schedule snapshot (FR-009).
+   *
+   * `locationId: null` means "no schedule entry matches and no fallback
+   * available" (rare — the backend always returns a fallback when the NPC
+   * has been registered). Includes an entry for the player ('kyousuke')
+   * so the UI can surface the player's current activity without forking.
+   *
+   * Updated by ScheduleSystem at most once per game-minute. NOT serialised
+   * to the save payload (schedules are deterministic from time → can be
+   * reconstructed on load).
+   */
+  npcSchedules: Record<string, { locationId: string | null; activity: string }>;
+  setNPCSchedule: (
+    npcId: string,
+    entry: { locationId: string | null; activity: string },
+  ) => void;
+  setNPCSchedules: (
+    record: Record<string, { locationId: string | null; activity: string }>,
+  ) => void;
 }
 
 const initialNPCs: Record<string, NPCStoreEntry> = Object.fromEntries(
@@ -225,7 +246,7 @@ const initialStory: StorySlice = {
 };
 
 export const useGameStore = create<GameStoreState>((set) => ({
-  phase: '4.1',
+  phase: '4.2',
   currentLocationId: null,
   setCurrentLocation: (id) => set({ currentLocationId: id }),
   playerPosition: { x: 640, y: 360 },
@@ -392,4 +413,40 @@ export const useGameStore = create<GameStoreState>((set) => ({
   playerLocationId: null,
   setPlayerLocationId: (id) =>
     set((state) => (state.playerLocationId === id ? state : { playerLocationId: id })),
+
+  // Phase 4.2 — npc schedule slice (FR-009). Default empty; populated by
+  // ScheduleSystem after the first successful POST /schedule/current. Each
+  // entry is shallow-compared on update so a no-op (same locationId +
+  // activity) does not churn React subscribers.
+  npcSchedules: {},
+  setNPCSchedule: (npcId, entry) =>
+    set((state) => {
+      const cur = state.npcSchedules[npcId];
+      if (cur && cur.locationId === entry.locationId && cur.activity === entry.activity) {
+        return state;
+      }
+      return {
+        npcSchedules: { ...state.npcSchedules, [npcId]: entry },
+      };
+    }),
+  setNPCSchedules: (record) =>
+    set((state) => {
+      // Bulk replace, but short-circuit when nothing changed (same keys + same
+      // values per key). The cheap path keeps minute-tick rerenders down.
+      const curKeys = Object.keys(state.npcSchedules);
+      const newKeys = Object.keys(record);
+      if (curKeys.length === newKeys.length) {
+        let identical = true;
+        for (const k of newKeys) {
+          const cur = state.npcSchedules[k];
+          const next = record[k]!;
+          if (!cur || cur.locationId !== next.locationId || cur.activity !== next.activity) {
+            identical = false;
+            break;
+          }
+        }
+        if (identical) return state;
+      }
+      return { npcSchedules: { ...record } };
+    }),
 }));

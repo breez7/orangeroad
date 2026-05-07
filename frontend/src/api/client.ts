@@ -437,3 +437,67 @@ export async function checkEventEligible(
     { method: 'POST', body: state, signal: opts.signal },
   );
 }
+
+// ---- Phase 4.2 Schedule (FR-009 일과 시스템) ------------------------------
+
+export type APIDayOfWeek = 'MON' | 'TUE' | 'WED' | 'THU' | 'FRI' | 'SAT' | 'SUN';
+
+export interface ScheduleEntry {
+  days: APIDayOfWeek[];
+  /** Inclusive start in minute-of-day (0..1440). */
+  fromMinute: number;
+  /** Exclusive end in minute-of-day (0..1440). */
+  toMinute: number;
+  locationId: string;
+  activity: string;
+}
+
+export interface NPCScheduleResult {
+  id: string;
+  weekly: ScheduleEntry[];
+}
+
+export interface ScheduleListResult {
+  count: number;
+  npcs: string[];
+}
+
+export interface CurrentScheduleEntry {
+  locationId: string;
+  activity: string;
+}
+
+export interface CurrentSchedulesResult {
+  schedules: Record<string, CurrentScheduleEntry>;
+}
+
+export async function listSchedules(
+  opts: { signal?: AbortSignal } = {},
+): Promise<ScheduleListResult> {
+  return fetchJSON<ScheduleListResult>('/schedule', {
+    method: 'GET',
+    signal: opts.signal,
+  });
+}
+
+export async function getNPCSchedule(
+  npcId: string,
+  opts: { signal?: AbortSignal } = {},
+): Promise<NPCScheduleResult> {
+  return fetchJSON<NPCScheduleResult>(
+    `/schedule/${encodeURIComponent(npcId)}`,
+    { method: 'GET', signal: opts.signal },
+  );
+}
+
+export async function getCurrentSchedules(
+  time: { hour: number; minute: number },
+  dayOfWeek: APIDayOfWeek,
+  opts: { signal?: AbortSignal } = {},
+): Promise<CurrentSchedulesResult> {
+  return fetchJSON<CurrentSchedulesResult>('/schedule/current', {
+    method: 'POST',
+    body: { time, dayOfWeek },
+    signal: opts.signal,
+  });
+}

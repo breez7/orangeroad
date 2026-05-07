@@ -62,12 +62,21 @@ export function TimeDisplay() {
   const weekdayLabel = KOREAN_WEEKDAY[dayOfWeek];
   const phaseDisplay = isNight ? `🌙 ${phaseLabel}` : phaseLabel;
 
+  // Phase 4.2 — kyousuke's current scheduled activity. Pulled from the
+  // npcSchedules slice (kept fresh by ScheduleSystem). Until the first
+  // /schedule/current fetch lands the slice is empty; we render a subtle
+  // weekday/weekend fallback so the hint is never blank.
+  const kyousukeActivity = useGameStore((s) => s.npcSchedules.kyousuke?.activity ?? null);
+  const isWeekend = dayOfWeek === 'SAT' || dayOfWeek === 'SUN';
+  const fallbackHint = isWeekend ? '주말 — 자유 시간' : '평일 일과';
+  const activityHint = kyousukeActivity ?? fallbackHint;
+
   return (
     <div
       className={className}
       role="status"
       aria-live="polite"
-      aria-label={`Day ${day}, ${pad2(hour)}시 ${pad2(minute)}분, ${weekdayLabel}, ${phaseLabel}`}
+      aria-label={`Day ${day}, ${pad2(hour)}시 ${pad2(minute)}분, ${weekdayLabel}, ${phaseLabel}, 일과: ${activityHint}`}
     >
       <p className="text-xs text-gray-300 leading-tight">Day {day}</p>
       <p className="text-2xl font-bold text-orange-primary leading-tight font-mono tracking-wider">
@@ -75,6 +84,9 @@ export function TimeDisplay() {
       </p>
       <p className="text-xs text-gray-200 leading-tight mt-0.5">
         {weekdayLabel} · {phaseDisplay}
+      </p>
+      <p className="text-xs text-orange-secondary leading-tight mt-0.5 italic">
+        쿄우스케 일과: {activityHint}
       </p>
     </div>
   );

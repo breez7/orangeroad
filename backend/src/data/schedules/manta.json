@@ -1,0 +1,75 @@
+{
+  "id": "manta",
+  "weekly": [
+    {
+      "days": ["MON", "TUE", "WED", "THU", "FRI"],
+      "fromMinute": 360,
+      "toMinute": 480,
+      "locationId": "kyousuke-home",
+      "activity": "등교 준비"
+    },
+    {
+      "days": ["MON", "TUE", "WED", "THU", "FRI"],
+      "fromMinute": 480,
+      "toMinute": 720,
+      "locationId": "school",
+      "activity": "오전 수업"
+    },
+    {
+      "days": ["MON", "TUE", "WED", "THU", "FRI"],
+      "fromMinute": 720,
+      "toMinute": 780,
+      "locationId": "school",
+      "activity": "점심시간"
+    },
+    {
+      "days": ["MON", "TUE", "WED", "THU", "FRI"],
+      "fromMinute": 780,
+      "toMinute": 930,
+      "locationId": "school",
+      "activity": "오후 수업"
+    },
+    {
+      "days": ["MON", "TUE", "WED", "THU", "FRI"],
+      "fromMinute": 930,
+      "toMinute": 1080,
+      "locationId": "cafe",
+      "activity": "방과후 — 카페"
+    },
+    {
+      "days": ["MON", "TUE", "WED", "THU", "FRI"],
+      "fromMinute": 1080,
+      "toMinute": 1320,
+      "locationId": "kyousuke-home",
+      "activity": "저녁 — 집"
+    },
+    {
+      "days": ["SAT", "SUN"],
+      "fromMinute": 540,
+      "toMinute": 780,
+      "locationId": "kyousuke-home",
+      "activity": "주말 아침 — 집"
+    },
+    {
+      "days": ["SAT", "SUN"],
+      "fromMinute": 780,
+      "toMinute": 1080,
+      "locationId": "cafe",
+      "activity": "주말 — 카페"
+    },
+    {
+      "days": ["SAT", "SUN"],
+      "fromMinute": 1080,
+      "toMinute": 1320,
+      "locationId": "kyousuke-home",
+      "activity": "주말 저녁 — 집"
+    },
+    {
+      "days": ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"],
+      "fromMinute": 1320,
+      "toMinute": 1440,
+      "locationId": "kyousuke-home",
+      "activity": "잠"
+    }
+  ]
+}

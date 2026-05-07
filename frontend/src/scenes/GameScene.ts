@@ -9,6 +9,7 @@ import { DialogSystem } from '@/systems/DialogSystem';
 import { TimeSystem } from '@/systems/TimeSystem';
 import { SaveSystem } from '@/systems/SaveSystem';
 import { StorySystem } from '@/systems/StorySystem';
+import { ScheduleSystem } from '@/systems/ScheduleSystem';
 import { findLocationAt } from '@/data/locations';
 import { useGameStore } from '@/store/gameStore';
 
@@ -28,6 +29,8 @@ export class GameScene {
   readonly save: SaveSystem;
   /** Phase 4.1 — scripted story event playback (FR-006). */
   readonly story: StorySystem;
+  /** Phase 4.2 — NPC daily schedule + teleport-on-minute (FR-009). */
+  readonly schedule: ScheduleSystem;
   private readonly locations: Location[] = [];
   private readonly movement: MovementSystem;
   private readonly npcLayer: Container;
@@ -111,6 +114,15 @@ export class GameScene {
     });
     void this.story.boot();
 
+    // Phase 4.2 — schedule system. Subscribes to time changes and teleports
+    // NPCs to their schedule's location each game-minute. The boot() call
+    // also kicks off an immediate refresh so first-paint reflects the
+    // current time-of-day, not the spawn defaults.
+    this.schedule = new ScheduleSystem({
+      entityManager: this.entityManager,
+    });
+    this.schedule.boot();
+
     // Click-to-walk system. Bind events on the scene root so empty grass
     // between location tiles still registers clicks. The dialog system gets
     // first crack at every click; movement ignores input while dialog OR a
@@ -126,7 +138,7 @@ export class GameScene {
     this.movement.attach();
 
     const banner = new Text({
-      text: '오렌지로드 마을 — Phase 2.3 (대화)',
+      text: '오렌지로드 마을 — Phase 4.2 (일과)',
       style: {
         fontFamily: 'system-ui, -apple-system, sans-serif',
         fontSize: 18,
@@ -188,6 +200,8 @@ export class GameScene {
     // is intentionally NOT cleared here so a save written mid-event can
     // resume on next load (Phase 4.x).
     this.story.destroy();
+    // Phase 4.2 — tear down schedule system (unsubscribe + abort fetch).
+    this.schedule.destroy();
     useGameStore.getState().closeDialog();
     // Tear down NPCs before the parent container goes away so each NPC's
     // own destroy() runs (StrictMode-safe re-init).

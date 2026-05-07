@@ -22,6 +22,25 @@ export function findLocationAt(x: number, y: number, locs: readonly LocationDef[
   return null;
 }
 
+/**
+ * Phase 4.2 — return the geometric center of a location rect, used by the
+ * ScheduleSystem to teleport NPCs to a default-but-distinct point inside
+ * each building. Returns null when the location id is unknown so callers
+ * can decide whether to no-op (the typical choice — leave the NPC where it
+ * was rather than warping to a wrong spot).
+ */
+export function centerOf(
+  locationId: string,
+  locs: readonly LocationDef[] = LOCATIONS,
+): { x: number; y: number } | null {
+  for (const l of locs) {
+    if (l.id === locationId) {
+      return { x: l.x + l.width / 2, y: l.y + l.height / 2 };
+    }
+  }
+  return null;
+}
+
 export const LOCATIONS: LocationDef[] = [
   {
     id: 'school',

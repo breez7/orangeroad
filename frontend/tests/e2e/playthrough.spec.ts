@@ -147,8 +147,13 @@ test('mandatory 11-step end-to-end playthrough', async ({ page }) => {
   // 11 user-facing steps + step 7b browser reload each have a baseline of ~5s
   // for click + render + network + react-rerender. The Phase B-1/B-2 sprite +
   // town artwork added another ~30s of paint cost on top of #18-#19, pushing
-  // a clean run to ~190-220s. 240s gives headroom on Pi-class hosts.
-  test.setTimeout(240_000);
+  // a clean run to ~190-220s in isolation. When the api spec runs first in
+  // the same suite, the api-spec round-trips warm the LM mock + backend so
+  // the playthrough sees more contention and sometimes nudges past 240s at
+  // step 10 (natural eligibility round-trip). Empirically 4 flakes in 59
+  // hourly runs (6.8%) all timed out there. 300s absorbs that variance with
+  // headroom while keeping individual hangs visible.
+  test.setTimeout(300_000);
 
   // Disable CSS animations / transitions globally so Playwright's actionability
   // wait doesn't burn ~300ms on every click for the panel-glass slide-up keyframes.
